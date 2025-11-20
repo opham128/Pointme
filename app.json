@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Pointme",
+    "slug": "pointme",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pointme.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs your location to find nearby places and show you the direction.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs your location to find nearby places and show you the direction."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.pointme.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Pointme to use your location to find nearby places."
+        }
+      ]
+    ],
+    "scheme": "pointme",
+    "extra": {
+      "googlePlacesApiKey": ""
+    }
+  }
+}
+

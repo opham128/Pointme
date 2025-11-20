@@ -1,0 +1,34 @@
+import { Category } from './types';
+
+export const CATEGORIES: Record<Category, { label: string; emoji: string; googleType: string }> = {
+  bars: {
+    label: 'Bars',
+    emoji: '🍺',
+    googleType: 'bar',
+  },
+  restaurants: {
+    label: 'Restaurants',
+    emoji: '🍽️',
+    googleType: 'restaurant',
+  },
+  liquor_stores: {
+    label: 'Liquor Stores',
+    emoji: '🍷',
+    googleType: 'liquor_store',
+  },
+  cafes: {
+    label: 'Cafés',
+    emoji: '☕',
+    googleType: 'cafe',
+  },
+  convenience_stores: {
+    label: 'Convenience Stores',
+    emoji: '🏪',
+    googleType: 'convenience_store',
+  },
+};
+
+export const ARRIVAL_DISTANCE_THRESHOLD = 25; // meters
+
+export const GOOGLE_PLACES_API_BASE_URL = 'https://maps.googleapis.com/maps/api/place';
+
