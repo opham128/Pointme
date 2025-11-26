@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Location, Place, Category } from '../types';
 import { findNearestPlace } from '../services/googlePlaces';
 
 /**
  * Hook to find and track the nearest place of a given category
+ * Only fetches once when category or initial location is set
  * 
  * @param userLocation User's current location
  * @param category Category to search for
@@ -23,6 +24,11 @@ export function useNearestPlace(
   const [place, setPlace] = useState<Place | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
+  
+  // Track if we've already fetched for this category
+  const fetchedCategoryRef = useRef<Category | null>(null);
+  const hasFetchedRef = useRef<boolean>(false);
+  const initialLocationRef = useRef<Location | null>(null);
 
   const fetchNearestPlace = async () => {
     if (!userLocation || !category || !enabled) {
@@ -35,6 +41,9 @@ export function useNearestPlace(
     try {
       const nearestPlace = await findNearestPlace(userLocation, category);
       setPlace(nearestPlace);
+      fetchedCategoryRef.current = category;
+      hasFetchedRef.current = true;
+      initialLocationRef.current = userLocation;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to find nearest place');
       setError(error);
@@ -45,8 +54,24 @@ export function useNearestPlace(
   };
 
   useEffect(() => {
-    fetchNearestPlace();
-  }, [userLocation, category, enabled]);
+    // Only fetch if:
+    // 1. We have a location and category but haven't fetched yet, OR
+    // 2. The category has changed (and we need to refetch for new category)
+    const categoryChanged = fetchedCategoryRef.current !== category;
+    const hasLocationButNotFetched = userLocation && !hasFetchedRef.current;
+    
+    // Reset place when category changes
+    if (categoryChanged && fetchedCategoryRef.current !== null) {
+      setPlace(null);
+      hasFetchedRef.current = false;
+    }
+    
+    const shouldFetch = (hasLocationButNotFetched || categoryChanged) && userLocation && category && enabled;
+    
+    if (shouldFetch) {
+      fetchNearestPlace();
+    }
+  }, [category, enabled, userLocation]); // userLocation needed for initial fetch, but refs prevent refetching on updates
 
   return {
     place,

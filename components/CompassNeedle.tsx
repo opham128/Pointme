@@ -3,8 +3,8 @@ import { View, StyleSheet, useColorScheme } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
+  Easing,
 } from 'react-native-reanimated';
 
 interface CompassNeedleProps {
@@ -16,6 +16,24 @@ interface CompassNeedleProps {
   rotation: number;
 }
 
+/**
+ * Normalizes angle to shortest path between current and target
+ * Handles 0-360 wrap-around smoothly
+ */
+function normalizeAngle(current: number, target: number): number {
+  // Normalize to -180 to 180 range
+  let diff = target - current;
+  
+  // Find shortest path (handle wrap-around)
+  if (diff > 180) {
+    diff -= 360;
+  } else if (diff < -180) {
+    diff += 360;
+  }
+  
+  return current + diff;
+}
+
 export function CompassNeedle({ rotation }: CompassNeedleProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -25,9 +43,13 @@ export function CompassNeedle({ rotation }: CompassNeedleProps) {
 
   // Update rotation value when prop changes
   React.useEffect(() => {
-    rotationValue.value = withSpring(rotation, {
-      damping: 15,
-      stiffness: 100,
+    // Normalize the rotation to take the shortest path
+    const normalizedTarget = normalizeAngle(rotationValue.value, rotation);
+    
+    // Use withTiming with smooth easing instead of spring for Apple-like smoothness
+    rotationValue.value = withTiming(normalizedTarget, {
+      duration: 200, // Smooth, responsive animation
+      easing: Easing.out(Easing.cubic), // Smooth easing curve similar to Apple's
     });
   }, [rotation]);
 

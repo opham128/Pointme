@@ -46,10 +46,11 @@ export default function CompassScreen() {
   }, [distanceMeters, hasArrived]);
 
   // Calculate bearing from user to target
+  // This should update as user moves, but the place location stays fixed
   const bearing = React.useMemo(() => {
     if (!userLocation || !place) return 0;
     return calculateBearing(userLocation, place.location);
-  }, [userLocation, place]);
+  }, [userLocation?.latitude, userLocation?.longitude, place?.location.latitude, place?.location.longitude]);
 
   // Calculate rotation angle for compass needle
   // The needle should point toward the target relative to device orientation
@@ -59,8 +60,17 @@ export default function CompassScreen() {
   // When rotation = 0, target is straight ahead
   // When rotation = 90, target is to the right
   // When rotation = -90, target is to the left
+  // As you rotate the phone clockwise (heading increases), rotation decreases (needle rotates counter-clockwise)
   const rotation = React.useMemo(() => {
-    return bearing - heading;
+    // bearing - heading: when heading increases (rotating right), rotation decreases (needle goes left)
+    let diff = bearing - heading;
+    // Normalize to -180 to 180 range for shortest rotation path
+    if (diff > 180) {
+      diff -= 360;
+    } else if (diff < -180) {
+      diff += 360;
+    }
+    return diff;
   }, [bearing, heading]);
 
   if (!selectedCategory) {
