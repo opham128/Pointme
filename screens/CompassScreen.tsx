@@ -47,10 +47,10 @@ export default function CompassScreen() {
 
   // Simple compass: needle always points north
   // When device points north (heading = 0°), needle rotation = 0°
-  // When device points east (heading = 90°), needle rotation = -90° (needle points left to stay pointing north)
-  // So rotation = -heading to keep needle pointing north
+  // When device points east (heading = 90°), needle should rotate to stay pointing north
+  // Flipped sign: use heading directly (not -heading)
   const rotation = React.useMemo(() => {
-    return -heading;
+    return heading;
   }, [heading]);
 
   // Bearing calculation - commented out for simple compass test
