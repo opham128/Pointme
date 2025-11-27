@@ -45,33 +45,21 @@ export default function CompassScreen() {
     }
   }, [distanceMeters, hasArrived]);
 
-  // Calculate bearing from user to target
-  // This should update as user moves, but the place location stays fixed
+  // Simple compass: needle always points north
+  // When device points north (heading = 0°), needle rotation = 0°
+  // When device points east (heading = 90°), needle rotation = -90° (needle points left to stay pointing north)
+  // So rotation = -heading to keep needle pointing north
+  const rotation = React.useMemo(() => {
+    return -heading;
+  }, [heading]);
+
+  // Bearing calculation - commented out for simple compass test
+  /*
   const bearing = React.useMemo(() => {
     if (!userLocation || !place) return 0;
     return calculateBearing(userLocation, place.location);
   }, [userLocation?.latitude, userLocation?.longitude, place?.location.latitude, place?.location.longitude]);
-
-  // Calculate rotation angle for compass needle
-  // The needle should point toward the target relative to device orientation
-  // bearing: direction to target (0-360°, where 0 is North)
-  // heading: device's current orientation (0-360°, where 0 is North)
-  // rotation: how much to rotate the needle = bearing - heading
-  // When rotation = 0, target is straight ahead
-  // When rotation = 90, target is to the right
-  // When rotation = -90, target is to the left
-  // As you rotate the phone clockwise (heading increases), rotation decreases (needle rotates counter-clockwise)
-  const rotation = React.useMemo(() => {
-    // bearing - heading: when heading increases (rotating right), rotation decreases (needle goes left)
-    let diff = bearing - heading;
-    // Normalize to -180 to 180 range for shortest rotation path
-    if (diff > 180) {
-      diff -= 360;
-    } else if (diff < -180) {
-      diff += 360;
-    }
-    return diff;
-  }, [bearing, heading]);
+  */
 
   if (!selectedCategory) {
     router.replace('/');
@@ -152,7 +140,7 @@ export default function CompassScreen() {
             Heading: {Math.round(heading)}°
           </Text>
           <Text style={[styles.headingLabel, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
-            Bearing: {Math.round(bearing)}°
+            {heading < 45 || heading >= 315 ? 'N' : heading < 135 ? 'E' : heading < 225 ? 'S' : 'W'}
           </Text>
         </View>
       </View>
