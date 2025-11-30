@@ -54,24 +54,68 @@ export async function findNearestPlace(
     const response = await fetch(url);
     const data = await response.json();
 
-    if (data.status === 'OK' && data.results && data.results.length > 0) {
-      // Get the first result (nearest place)
-      const place = data.results[0];
-      
-      const placeLocation: Location = {
-        latitude: place.geometry.location.lat,
-        longitude: place.geometry.location.lng,
-      };
+    console.log('=== Google Places API Response ===');
+    console.log('Status:', data.status);
+    console.log('Total results:', data.results?.length || 0);
+    console.log('User location:', userLocation);
+    console.log('Category:', categoryInfo.label);
+    console.log('Search radius:', radius, 'meters');
 
-      const distance = calculateDistance(userLocation, placeLocation);
+    if (data.status === 'OK' && data.results && data.results.length > 0) {
+      // Calculate distance for all results and find the nearest one
+      interface PlaceWithDistance {
+        name: string;
+        location: Location;
+        address?: string;
+        distance: number; // Required, always calculated
+        placeId?: string;
+        rawPlace?: any;
+      }
+      
+      const placesWithDistance: PlaceWithDistance[] = data.results.map((place: any) => {
+        const placeLocation: Location = {
+          latitude: place.geometry.location.lat,
+          longitude: place.geometry.location.lng,
+        };
+        const distance = calculateDistance(userLocation, placeLocation);
+        return {
+          name: place.name,
+          location: placeLocation,
+          address: place.vicinity || place.formatted_address,
+          distance,
+          placeId: place.place_id,
+          rawPlace: place, // Keep original for debugging
+        };
+      });
+
+      // Sort by distance to find the nearest
+      placesWithDistance.sort((a: PlaceWithDistance, b: PlaceWithDistance) => a.distance - b.distance);
+
+      console.log('\n=== All Places Found (sorted by distance) ===');
+      placesWithDistance.forEach((p: PlaceWithDistance, index: number) => {
+        console.log(`${index + 1}. ${p.name}`);
+        console.log(`   Distance: ${Math.round(p.distance)}m (${Math.round(p.distance * 3.28084)}ft)`);
+        console.log(`   Address: ${p.address || 'N/A'}`);
+        console.log(`   Location: ${p.location.latitude}, ${p.location.longitude}`);
+        console.log(`   Place ID: ${p.placeId || 'N/A'}`);
+        console.log('');
+      });
+
+      // Get the nearest place (first after sorting)
+      const nearestPlace = placesWithDistance[0];
+      console.log('=== Selected Nearest Place ===');
+      console.log('Name:', nearestPlace.name);
+      console.log('Distance:', Math.round(nearestPlace.distance), 'm');
 
       return {
-        name: place.name,
-        location: placeLocation,
-        address: place.vicinity || place.formatted_address,
-        distance,
-        placeId: place.place_id,
+        name: nearestPlace.name,
+        location: nearestPlace.location,
+        address: nearestPlace.address,
+        distance: nearestPlace.distance,
+        placeId: nearestPlace.placeId,
       };
+    } else {
+      console.log('No results found or API error:', data.status, data.error_message);
     }
 
     return null;

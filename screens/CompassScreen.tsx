@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../context/AppContext';
 import { useHeading } from '../hooks/useHeading';
 import { useNearestPlace } from '../hooks/useNearestPlace';
@@ -26,6 +27,7 @@ export default function CompassScreen() {
   const { place, loading, error } = useNearestPlace(userLocation, selectedCategory, !!userLocation);
   const { distanceMeters, distanceFeet } = useDistance(userLocation, place?.location || null);
   const [hasArrived, setHasArrived] = useState(false);
+  const hasAlignedRef = useRef(false); // Track if we've already triggered alignment haptic
 
   // Update target place in context
   useEffect(() => {
@@ -38,12 +40,21 @@ export default function CompassScreen() {
   useEffect(() => {
     if (distanceMeters !== null && distanceMeters < ARRIVAL_DISTANCE_THRESHOLD && !hasArrived) {
       setHasArrived(true);
+      // Haptic feedback for arrival
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Navigate to arrival screen after a brief delay
       setTimeout(() => {
         router.push('/arrival');
       }, 500);
     }
   }, [distanceMeters, hasArrived]);
+
+  // Redirect if no category selected
+  useEffect(() => {
+    if (!selectedCategory) {
+      router.replace('/');
+    }
+  }, [selectedCategory, router]);
 
   // Calculate bearing from user to target location
   const bearing = React.useMemo(() => {
@@ -73,8 +84,27 @@ export default function CompassScreen() {
     return diff;
   }, [bearing, heading, place]);
 
+  // Haptic feedback when heading aligns with bearing (pointing in the right direction)
+  useEffect(() => {
+    if (!place || hasArrived) return;
+
+    // Check if heading and bearing are aligned (within 5 degrees)
+    const alignmentThreshold = 5;
+    const angleDiff = Math.abs(rotation);
+    
+    if (angleDiff <= alignmentThreshold) {
+      // Only trigger haptic once when we first align
+      if (!hasAlignedRef.current) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        hasAlignedRef.current = true;
+      }
+    } else {
+      // Reset the flag when we're no longer aligned
+      hasAlignedRef.current = false;
+    }
+  }, [rotation, place, hasArrived]);
+
   if (!selectedCategory) {
-    router.replace('/');
     return null;
   }
 
@@ -156,6 +186,18 @@ export default function CompassScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Test Arrival Button (for testing) */}
+      <TouchableOpacity
+        style={[styles.testButton, { backgroundColor: '#FF9500' }]}
+        onPress={() => {
+          setHasArrived(true);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          router.push('/arrival');
+        }}
+      >
+        <Text style={styles.testButtonText}>🧪 Test Arrival</Text>
+      </TouchableOpacity>
 
       {/* Back button */}
       <TouchableOpacity
@@ -239,6 +281,17 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  testButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  testButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
 

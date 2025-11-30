@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../context/AppContext';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
 import Animated, {
@@ -31,6 +32,9 @@ export default function ArrivalScreen() {
   const opacity = useSharedValue(0);
 
   useEffect(() => {
+    // Haptic feedback for arrival (success notification)
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    
     // Trigger confetti
     setConfettiTrigger((prev) => prev + 1);
 
@@ -41,6 +45,13 @@ export default function ArrivalScreen() {
     );
     opacity.value = withTiming(1, { duration: 500 });
   }, []);
+
+  // Redirect if no target place
+  useEffect(() => {
+    if (!targetPlace) {
+      router.replace('/');
+    }
+  }, [targetPlace, router]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -53,19 +64,24 @@ export default function ArrivalScreen() {
     if (!targetPlace) return;
 
     const { latitude, longitude } = targetPlace.location;
-    const url = Platform.select({
-      ios: `maps://maps.apple.com/?daddr=${latitude},${longitude}`,
-      android: `geo:${latitude},${longitude}?q=${latitude},${longitude}`,
-    });
-
-    if (url) {
-      Linking.openURL(url).catch((err) => {
-        console.error('Failed to open maps:', err);
-        // Fallback to web maps
-        const webUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-        Linking.openURL(webUrl);
-      });
+    const placeName = encodeURIComponent(targetPlace.name);
+    
+    // Use Google Maps URL that shows the full place card with images, reviews, etc.
+    // This URL will automatically open in Google Maps app if installed, or browser if not
+    let googleMapsUrl: string;
+    
+    if (targetPlace.placeId) {
+      // Use place_id with the search API - this reliably shows the place card
+      // The place_id parameter ensures we get the exact place, not just a search result
+      googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${placeName}&query_place_id=${targetPlace.placeId}`;
+    } else {
+      // Fallback: Use search with place name and coordinates
+      googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${placeName}&query_place_id=${latitude},${longitude}`;
     }
+
+    Linking.openURL(googleMapsUrl).catch((err) => {
+      console.error('Failed to open Google Maps:', err);
+    });
   };
 
   const handleChooseAnother = () => {
@@ -75,7 +91,6 @@ export default function ArrivalScreen() {
   };
 
   if (!targetPlace) {
-    router.replace('/');
     return null;
   }
 
