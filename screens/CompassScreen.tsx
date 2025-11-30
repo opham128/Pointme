@@ -45,21 +45,33 @@ export default function CompassScreen() {
     }
   }, [distanceMeters, hasArrived]);
 
-  // Simple compass: needle always points north
-  // When device points north (heading = 0°), needle rotation = 0°
-  // When device points east (heading = 90°), needle should rotate to stay pointing north
-  // Flipped sign: use heading directly (not -heading)
-  const rotation = React.useMemo(() => {
-    return heading;
-  }, [heading]);
-
-  // Bearing calculation - commented out for simple compass test
-  /*
+  // Calculate bearing from user to target location
   const bearing = React.useMemo(() => {
     if (!userLocation || !place) return 0;
     return calculateBearing(userLocation, place.location);
   }, [userLocation?.latitude, userLocation?.longitude, place?.location.latitude, place?.location.longitude]);
-  */
+
+  // Calculate rotation angle for compass needle to point toward target
+  // bearing: direction to target (0-360°, where 0 is North)
+  // heading: device's current orientation (0-360°, where 0 is North)
+  // rotation: how much to rotate the needle = bearing - heading
+  // When rotation = 0, target is straight ahead
+  // When rotation = 90, target is to the right
+  // When rotation = -90, target is to the left
+  const rotation = React.useMemo(() => {
+    if (!place) return 0;
+    
+    let diff = bearing - heading;
+    
+    // Normalize to -180 to 180 range for shortest rotation path
+    if (diff > 180) {
+      diff -= 360;
+    } else if (diff < -180) {
+      diff += 360;
+    }
+    
+    return diff;
+  }, [bearing, heading, place]);
 
   if (!selectedCategory) {
     router.replace('/');
@@ -140,7 +152,7 @@ export default function CompassScreen() {
             Heading: {Math.round(heading)}°
           </Text>
           <Text style={[styles.headingLabel, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
-            {heading < 45 || heading >= 315 ? 'N' : heading < 135 ? 'E' : heading < 225 ? 'S' : 'W'}
+            Bearing: {Math.round(bearing)}°
           </Text>
         </View>
       </View>

@@ -27,13 +27,12 @@ export function useHeading(enabled: boolean = true): number {
         }
 
         // Use watchHeadingAsync - this directly uses CLLocationManager.startUpdatingHeading()
-        // This is the exact same as the Swift code!
         subscription = await Location.watchHeadingAsync((newHeading) => {
-          // Get magHeading from LocationHeadingObject (same as Swift: newHeading.magneticHeading)
-          // Match Swift code: degrees = -1 * newHeading.magneticHeading
-          const degrees = -1 * newHeading.magHeading;
+          // Get magHeading from LocationHeadingObject
+          // Standard compass: 0° = North, 90° = East (right), 180° = South, 270° = West (left)
+          const degrees = newHeading.magHeading;
           
-          // Normalize to 0-360 range
+          // Normalize to 0-360 range (should already be in this range, but ensure it)
           const normalizedDegrees = degrees < 0 ? degrees + 360 : degrees;
           
           setHeading(normalizedDegrees);
