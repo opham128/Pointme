@@ -3,7 +3,7 @@ export type Category =
   | 'restaurants'
   | 'liquor_stores'
   | 'cafes'
-  | 'convenience_stores';
+  | 'random';
 
 export interface Location {
   latitude: number;

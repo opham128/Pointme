@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../context/AppContext';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
+import { addArrival } from '../services/storage';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -24,14 +25,23 @@ export default function ArrivalScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
-  const { targetPlace, setSelectedCategory, setTargetPlace } = useAppContext();
+  const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory } = useAppContext();
   const [confettiTrigger, setConfettiTrigger] = useState(0);
+  const [hasSavedArrival, setHasSavedArrival] = useState(false);
   
   // Animation values
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
+    // Save arrival to history
+    if (targetPlace && !hasSavedArrival) {
+      addArrival(targetPlace).then(() => {
+        refreshHistory();
+        setHasSavedArrival(true);
+      });
+    }
+
     // Haptic feedback for arrival (success notification)
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     
@@ -44,7 +54,7 @@ export default function ArrivalScreen() {
       withSpring(1, { damping: 10 })
     );
     opacity.value = withTiming(1, { duration: 500 });
-  }, []);
+  }, [targetPlace, hasSavedArrival, refreshHistory]);
 
   // Redirect if no target place
   useEffect(() => {

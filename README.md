@@ -5,7 +5,7 @@ A beautiful Expo React Native app that functions like a directional compass, poi
 ## 🎯 Features
 
 - **Location Permissions**: Graceful handling of location permissions with retry screens
-- **Category Selection**: Choose from Bars, Restaurants, Liquor Stores, Cafés, and Convenience Stores
+- **Category Selection**: Choose from Bars, Restaurants, Liquor Stores, Cafés, and Random (fun things to do)
 - **Nearest Place Finding**: Uses Google Places API to find the closest location
 - **Compass Navigation**: Real-time compass with magnetometer + GPS heading
 - **Arrival Detection**: Automatic detection when within 25 meters with celebration animation

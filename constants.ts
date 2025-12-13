@@ -21,10 +21,10 @@ export const CATEGORIES: Record<Category, { label: string; emoji: string; google
     emoji: '☕',
     googleType: 'cafe',
   },
-  convenience_stores: {
-    label: 'Convenience Stores',
-    emoji: '🏪',
-    googleType: 'convenience_store',
+  random: {
+    label: 'Random',
+    emoji: '🎲',
+    googleType: 'tourist_attraction', // Base type, but we'll use text search for variety
   },
 };
 
@@ -32,3 +32,5 @@ export const ARRIVAL_DISTANCE_THRESHOLD = 25; // meters
 
 export const GOOGLE_PLACES_API_BASE_URL = 'https://maps.googleapis.com/maps/api/place';
 
+
+export { Category };

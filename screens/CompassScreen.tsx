@@ -142,7 +142,7 @@ export default function CompassScreen() {
 
   const displayDistance = distanceMeters
     ? distanceMeters < 1000
-      ? `${Math.round(distanceMeters)}m (${Math.round(distanceFeet || 0)}ft)`
+      ? `${Math.round(distanceMeters)}m`
       : `${(distanceMeters / 1000).toFixed(2)}km`
     : '--';
 

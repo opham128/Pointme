@@ -6,6 +6,7 @@ import {
   ScrollView,
   useColorScheme,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Category } from '../types';
@@ -18,7 +19,7 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
-  const { setSelectedCategory, setUserLocation } = useAppContext();
+  const { setSelectedCategory, setUserLocation, arrivalCount } = useAppContext();
   const { location, loading, error, permissionGranted, requestPermission } = useLocation();
 
   // Update context when location is available
@@ -74,9 +75,19 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
-      <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-        Point Me
-      </Text>
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+          Point Me
+        </Text>
+        <TouchableOpacity
+          style={[styles.historyButton, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}
+          onPress={() => router.push('/history')}
+        >
+          <Text style={[styles.historyButtonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+            📍 {arrivalCount}
+          </Text>
+        </TouchableOpacity>
+      </View>
       <Text style={[styles.subtitle, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
         Choose a destination type
       </Text>
@@ -104,11 +115,26 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 20,
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   title: {
     fontSize: 42,
     fontWeight: 'bold',
+    flex: 1,
     textAlign: 'center',
-    marginBottom: 8,
+  },
+  historyButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  historyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   subtitle: {
     fontSize: 18,

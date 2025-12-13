@@ -1,6 +1,7 @@
 import { Location, Place } from '../types';
 import { CATEGORIES, Category } from '../constants';
 import { GOOGLE_PLACES_API_KEY as ENV_API_KEY } from '@env';
+import { getRecentPlaceIds } from './storage';
 
 // Get API key from environment variable
 // The babel plugin (react-native-dotenv) loads it from .env file
@@ -29,8 +30,59 @@ export function calculateDistance(loc1: Location, loc2: Location): number {
 }
 
 /**
+ * Perform a search with a specific radius and return results
+ * Helper function to avoid code duplication
+ */
+async function searchWithRadius(
+  userLocation: Location,
+  radius: number,
+  category: Category,
+  categoryInfo: any
+): Promise<any[]> {
+  const placeIdMap = new Map<string, any>();
+  
+  if (category === 'random') {
+    const randomQueries = [
+      'attractions',
+      'things to do',
+      'fun activities',
+      'tourist attractions',
+      'points of interest'
+    ];
+    const randomQuery = randomQueries[Math.floor(Math.random() * randomQueries.length)];
+    const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(randomQuery)}&location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&key=${GOOGLE_PLACES_API_KEY}`;
+    const textResponse = await fetch(textSearchUrl);
+    const textData = await textResponse.json();
+    
+    if (textData.status === 'OK' && textData.results) {
+      textData.results.forEach((place: any) => {
+        if (place.place_id) {
+          placeIdMap.set(place.place_id, place);
+        }
+      });
+    }
+  } else {
+    // Use Nearby Search for all categories (including bars)
+    const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&type=${categoryInfo.googleType}&key=${GOOGLE_PLACES_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.status === 'OK' && data.results) {
+      data.results.forEach((place: any) => {
+        if (place.place_id) {
+          placeIdMap.set(place.place_id, place);
+        }
+      });
+    }
+  }
+  
+  return Array.from(placeIdMap.values());
+}
+
+/**
  * Find the nearest place of a given category using Google Places API
- * Uses Nearby Search API with user's location as the center
+ * Uses progressive radius searches to ensure we find the closest places
+ * even when Google's API doesn't return all results in a single query
  * 
  * @param userLocation User's current location
  * @param category Category to search for
@@ -45,23 +97,56 @@ export async function findNearestPlace(
   }
 
   const categoryInfo = CATEGORIES[category];
-  const radius = 5000; // Search within 5km
-
-  // Use Google Places Nearby Search API
-  const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&type=${categoryInfo.googleType}&key=${GOOGLE_PLACES_API_KEY}`;
+  
+  // Progressive radius search: start small to catch nearby places, then expand
+  // This ensures we find places within 200m that might be missed in a single large-radius search
+  const searchRadii = [1000, 5000, 10000]; // 500m, 1km, 2km, 5km, 10km
 
   try {
-    const response = await fetch(url);
-    const data = await response.json();
+    console.log('=== Progressive Radius Search ===');
+    console.log('User location:', userLocation);
+    console.log('Category:', categoryInfo.label);
+    
+    // Search with progressively larger radii, stopping when we find results
+    // Since we sort by distance, results from a smaller radius will be closest
+    const allResultsMap = new Map<string, any>();
+    
+    for (const radius of searchRadii) {
+      console.log(`Searching with radius: ${radius}m`);
+      const results = await searchWithRadius(userLocation, radius, category, categoryInfo);
+      
+      let newResults = 0;
+      results.forEach((place: any) => {
+        if (place.place_id && !allResultsMap.has(place.place_id)) {
+          allResultsMap.set(place.place_id, place);
+          newResults++;
+        }
+      });
+      
+      console.log(`  Found ${results.length} results (${newResults} new)`);
+      
+      // If we found results in this radius, break - we don't need to search larger radii
+      // since we'll sort by distance and the closest will be from this smaller radius
+      if (results.length > 0) {
+        console.log(`  Found results in ${radius}m radius, stopping search`);
+        break;
+      }
+    }
+    
+    const allResults = Array.from(allResultsMap.values());
+    console.log(`Total unique places found: ${allResults.length}`);
+    
+    const data = { status: allResults.length > 0 ? 'OK' : 'ZERO_RESULTS', results: allResults };
 
     console.log('=== Google Places API Response ===');
     console.log('Status:', data.status);
     console.log('Total results:', data.results?.length || 0);
-    console.log('User location:', userLocation);
-    console.log('Category:', categoryInfo.label);
-    console.log('Search radius:', radius, 'meters');
 
     if (data.status === 'OK' && data.results && data.results.length > 0) {
+      // Get recent place IDs to exclude from results
+      const recentPlaceIds = await getRecentPlaceIds();
+      console.log('Excluding recent place IDs:', recentPlaceIds);
+
       // Calculate distance for all results and find the nearest one
       interface PlaceWithDistance {
         name: string;
@@ -72,7 +157,17 @@ export async function findNearestPlace(
         rawPlace?: any;
       }
       
-      const placesWithDistance: PlaceWithDistance[] = data.results.map((place: any) => {
+      // Filter out recent places and calculate distances
+      const placesWithDistance: PlaceWithDistance[] = data.results
+        .filter((place: any) => {
+          // Exclude places that are in recent history
+          if (place.place_id && recentPlaceIds.includes(place.place_id)) {
+            console.log(`Excluding recent place: ${place.name} (${place.place_id})`);
+            return false;
+          }
+          return true;
+        })
+        .map((place: any) => {
         const placeLocation: Location = {
           latitude: place.geometry.location.lat,
           longitude: place.geometry.location.lng,
@@ -88,13 +183,19 @@ export async function findNearestPlace(
         };
       });
 
+      // Check if all results were filtered out
+      if (placesWithDistance.length === 0) {
+        console.log('All results were filtered out (recent places). Returning null.');
+        return null;
+      }
+
       // Sort by distance to find the nearest
       placesWithDistance.sort((a: PlaceWithDistance, b: PlaceWithDistance) => a.distance - b.distance);
 
       console.log('\n=== All Places Found (sorted by distance) ===');
       placesWithDistance.forEach((p: PlaceWithDistance, index: number) => {
         console.log(`${index + 1}. ${p.name}`);
-        console.log(`   Distance: ${Math.round(p.distance)}m (${Math.round(p.distance * 3.28084)}ft)`);
+        console.log(`   Distance: ${Math.round(p.distance)}m`);
         console.log(`   Address: ${p.address || 'N/A'}`);
         console.log(`   Location: ${p.location.latitude}, ${p.location.longitude}`);
         console.log(`   Place ID: ${p.placeId || 'N/A'}`);
@@ -115,7 +216,7 @@ export async function findNearestPlace(
         placeId: nearestPlace.placeId,
       };
     } else {
-      console.log('No results found or API error:', data.status, data.error_message);
+      console.log('No results found or API error:', data.status);
     }
 
     return null;

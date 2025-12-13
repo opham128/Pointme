@@ -17,6 +17,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="compass" />
         <Stack.Screen name="arrival" />
+        <Stack.Screen name="history" />
       </Stack>
     </AppProvider>
   );
