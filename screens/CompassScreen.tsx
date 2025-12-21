@@ -15,14 +15,14 @@ import { useNearestPlace } from '../hooks/useNearestPlace';
 import { useDistance } from '../hooks/useDistance';
 import { calculateBearing } from '../services/googlePlaces';
 import { CompassNeedle } from '../components/CompassNeedle';
-import { ARRIVAL_DISTANCE_THRESHOLD } from '../constants';
+import { ARRIVAL_DISTANCE_THRESHOLD, FREE_LOCATIONS_LIMIT } from '../constants';
 import { CATEGORIES } from '../constants';
 
 export default function CompassScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
-  const { selectedCategory, userLocation, setTargetPlace } = useAppContext();
+  const { selectedCategory, userLocation, setTargetPlace, arrivalCount, hasPurchased } = useAppContext();
   const heading = useHeading(true);
   const { place, loading, error } = useNearestPlace(userLocation, selectedCategory, !!userLocation);
   const { distanceMeters, distanceFeet } = useDistance(userLocation, place?.location || null);
@@ -47,7 +47,7 @@ export default function CompassScreen() {
         router.push('/arrival');
       }, 500);
     }
-  }, [distanceMeters, hasArrived]);
+  }, [distanceMeters, hasArrived, router]);
 
   // Redirect if no category selected
   useEffect(() => {

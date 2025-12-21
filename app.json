@@ -30,7 +30,9 @@
       "package": "com.pointme.app",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -46,8 +48,10 @@
     ],
     "scheme": "pointme",
     "extra": {
-      "googlePlacesApiKey": ""
+      "googlePlacesApiKey": "",
+      "eas": {
+        "projectId": "ba633256-9c7b-4a26-b492-852e15c55a5c"
+      }
     }
   }
 }
-

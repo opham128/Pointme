@@ -80,14 +80,28 @@ export async function getRecentPlaceIds(): Promise<string[]> {
 }
 
 /**
- * Clear arrival history
+ * Clear arrival history (but keep the arrival count)
  */
 export async function clearArrivalHistory(): Promise<void> {
   try {
     await AsyncStorage.removeItem(ARRIVAL_HISTORY_KEY);
-    await AsyncStorage.removeItem(ARRIVAL_COUNT_KEY);
+    // Note: We keep ARRIVAL_COUNT_KEY so the total count is preserved
   } catch (error) {
     console.error('Error clearing arrival history:', error);
+  }
+}
+
+/**
+ * Clear all storage (for testing purposes)
+ * This clears both arrival history and arrival count
+ */
+export async function clearAllStorage(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(ARRIVAL_HISTORY_KEY);
+    await AsyncStorage.removeItem(ARRIVAL_COUNT_KEY);
+    console.log('All storage cleared');
+  } catch (error) {
+    console.error('Error clearing all storage:', error);
   }
 }
 

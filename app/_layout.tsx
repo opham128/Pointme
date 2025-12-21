@@ -18,6 +18,7 @@ export default function RootLayout() {
         <Stack.Screen name="compass" />
         <Stack.Screen name="arrival" />
         <Stack.Screen name="history" />
+        <Stack.Screen name="paywall" />
       </Stack>
     </AppProvider>
   );

@@ -16,6 +16,7 @@ export interface Place {
   address?: string;
   distance?: number; // in meters
   placeId?: string;
+  photos?: string[]; // Array of photo URLs
 }
 
 export interface CompassState {

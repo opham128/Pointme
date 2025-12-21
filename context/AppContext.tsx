@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Category, Place, Location } from '../types';
 import { getArrivalHistory, getArrivalCount, ArrivalHistoryItem } from '../services/storage';
+import { hasPurchasedFullApp, initializePurchases } from '../services/purchases';
 
 interface AppContextType {
   selectedCategory: Category | null;
@@ -12,6 +13,8 @@ interface AppContextType {
   arrivalHistory: ArrivalHistoryItem[];
   arrivalCount: number;
   refreshHistory: () => Promise<void>;
+  hasPurchased: boolean;
+  refreshPurchaseStatus: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -22,6 +25,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [userLocation, setUserLocation] = useState<Location | null>(null);
   const [arrivalHistory, setArrivalHistory] = useState<ArrivalHistoryItem[]>([]);
   const [arrivalCount, setArrivalCount] = useState<number>(0);
+  const [hasPurchased, setHasPurchased] = useState<boolean>(false);
 
   const refreshHistory = async () => {
     const history = await getArrivalHistory();
@@ -30,8 +34,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setArrivalCount(count);
   };
 
+  const refreshPurchaseStatus = async () => {
+    const purchased = await hasPurchasedFullApp();
+    setHasPurchased(purchased);
+  };
+
   useEffect(() => {
     refreshHistory();
+    refreshPurchaseStatus();
+    // Initialize purchases on app startup
+    initializePurchases();
   }, []);
 
   return (
@@ -46,6 +58,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         arrivalHistory,
         arrivalCount,
         refreshHistory,
+        hasPurchased,
+        refreshPurchaseStatus,
       }}
     >
       {children}

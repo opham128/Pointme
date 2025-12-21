@@ -208,12 +208,26 @@ export async function findNearestPlace(
       console.log('Name:', nearestPlace.name);
       console.log('Distance:', Math.round(nearestPlace.distance), 'm');
 
+      // Extract photos from the raw place data
+      let photos: string[] = [];
+      if (nearestPlace.rawPlace?.photos && Array.isArray(nearestPlace.rawPlace.photos)) {
+        // Get up to 3 photos
+        photos = nearestPlace.rawPlace.photos
+          .slice(0, 3)
+          .map((photo: any) => {
+            // Google Places Photo API URL
+            // maxwidth=800 for good quality without being too large
+            return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photo.photo_reference}&key=${GOOGLE_PLACES_API_KEY}`;
+          });
+      }
+
       return {
         name: nearestPlace.name,
         location: nearestPlace.location,
         address: nearestPlace.address,
         distance: nearestPlace.distance,
         placeId: nearestPlace.placeId,
+        photos: photos.length > 0 ? photos : undefined,
       };
     } else {
       console.log('No results found or API error:', data.status);
