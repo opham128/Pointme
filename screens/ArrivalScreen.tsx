@@ -32,33 +32,76 @@ export default function ArrivalScreen() {
   const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory, arrivalCount, hasPurchased } = useAppContext();
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [hasSavedArrival, setHasSavedArrival] = useState(false);
+  const [imagesReady, setImagesReady] = useState(false);
+  const hasAnimatedRef = React.useRef(false);
   
-  // Animation values
-  const scale = useSharedValue(0);
-  const opacity = useSharedValue(0);
+  // Staggered animation values
+  const photoScale = useSharedValue(0.95);
+  const photoOpacity = useSharedValue(0);
+  const arrivalScale = useSharedValue(0.9);
+  const arrivalTranslateY = useSharedValue(10);
+  const arrivalOpacity = useSharedValue(0);
+  const placeNameTranslateY = useSharedValue(8);
+  const placeNameOpacity = useSharedValue(0);
 
+  // Save arrival and trigger animations - only once when targetPlace is set
   useEffect(() => {
+    if (!targetPlace) return;
+
     // Save arrival to history (allow 5th arrival, paywall shows when selecting new category)
-    if (targetPlace && !hasSavedArrival) {
+    if (!hasSavedArrival) {
       addArrival(targetPlace).then(() => {
         refreshHistory();
         setHasSavedArrival(true);
       });
     }
+  }, [targetPlace, hasSavedArrival]);
 
-    // Haptic feedback for arrival (success notification)
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  // Trigger animations when images are ready (or immediately if no photos)
+  useEffect(() => {
+    if (!targetPlace) return;
     
-    // Trigger confetti
-    setConfettiTrigger((prev) => prev + 1);
+    // Wait for images to load if photos exist, otherwise animate immediately
+    const shouldAnimate = !targetPlace.photos || targetPlace.photos.length === 0 || imagesReady;
+    
+    if (shouldAnimate && !hasAnimatedRef.current) {
+      // Haptic feedback for arrival (success notification)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      // Trigger confetti immediately
+      setConfettiTrigger(1);
 
-    // Animate arrival message
-    scale.value = withSequence(
-      withSpring(1.2, { damping: 8 }),
-      withSpring(1, { damping: 10 })
-    );
-    opacity.value = withTiming(1, { duration: 500 });
-  }, [targetPlace, hasSavedArrival, refreshHistory]);
+      // Staggered animations for polish
+      // Photo: scale + fade (0ms delay)
+      photoScale.value = withSequence(
+        withSpring(1.05, { damping: 14, stiffness: 180 }),
+        withTiming(1, { duration: 120 })
+      );
+      photoOpacity.value = withTiming(1, { duration: 300 });
+
+      // "You've Arrived!" text: bounce + upward motion (80ms delay)
+      setTimeout(() => {
+        arrivalScale.value = withSequence(
+          withSpring(1.1, { damping: 14, stiffness: 180 }),
+          withTiming(1, { duration: 120 })
+        );
+        arrivalTranslateY.value = withSequence(
+          withTiming(0, { duration: 250 }),
+          withTiming(-4, { duration: 120 }),
+          withTiming(0, { duration: 120 })
+        );
+        arrivalOpacity.value = withTiming(1, { duration: 300 });
+      }, 80);
+
+      // Place name: fade + slide (160ms delay)
+      setTimeout(() => {
+        placeNameTranslateY.value = withTiming(0, { duration: 400 });
+        placeNameOpacity.value = withTiming(1, { duration: 400 });
+      }, 160);
+      
+      hasAnimatedRef.current = true;
+    }
+  }, [targetPlace, imagesReady]);
 
   // Redirect if no target place
   useEffect(() => {
@@ -67,12 +110,24 @@ export default function ArrivalScreen() {
     }
   }, [targetPlace, router]);
 
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: scale.value }],
-      opacity: opacity.value,
-    };
-  });
+  // Animated styles for staggered content
+  const photoAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: photoScale.value }],
+    opacity: photoOpacity.value,
+  }));
+
+  const arrivalAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: arrivalScale.value },
+      { translateY: arrivalTranslateY.value }
+    ],
+    opacity: arrivalOpacity.value,
+  }));
+
+  const placeNameAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: placeNameTranslateY.value }],
+    opacity: placeNameOpacity.value,
+  }));
 
   const handleOpenInMaps = async () => {
     if (!targetPlace) return;
@@ -107,10 +162,10 @@ export default function ArrivalScreen() {
     <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
       <ConfettiAnimation trigger={confettiTrigger} />
 
-      <Animated.View style={[styles.content, animatedStyle]}>
+      <View style={styles.content}>
         {/* Photo Gallery */}
         {targetPlace.photos && targetPlace.photos.length > 0 ? (
-          <View style={styles.photoContainer}>
+          <Animated.View style={[styles.photoContainer, photoAnimatedStyle]}>
             <ScrollView
               horizontal
               pagingEnabled
@@ -124,6 +179,11 @@ export default function ArrivalScreen() {
                   source={{ uri: photoUrl }}
                   style={styles.placePhoto}
                   resizeMode="cover"
+                  onLoadEnd={() => {
+                    if (index === 0) {
+                      setImagesReady(true);
+                    }
+                  }}
                 />
               ))}
             </ScrollView>
@@ -140,30 +200,30 @@ export default function ArrivalScreen() {
                 ))}
               </View>
             )}
-          </View>
+          </Animated.View>
         ) : (
-          <View style={[styles.placeholderPhoto, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+          <Animated.View style={[styles.placeholderPhoto, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }, photoAnimatedStyle]}>
             <Text style={[styles.placeholderEmoji, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
               📍
             </Text>
-          </View>
+          </Animated.View>
         )}
         
-        <Text style={[styles.arrivalText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+        <Animated.Text style={[styles.arrivalText, { color: isDark ? '#FFFFFF' : '#000000' }, arrivalAnimatedStyle]}>
           You've Arrived!
-        </Text>
+        </Animated.Text>
 
         <View style={styles.placeInfo}>
-          <Text style={[styles.placeName, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+          <Animated.Text style={[styles.placeName, { color: isDark ? '#FFFFFF' : '#000000' }, placeNameAnimatedStyle]}>
             {targetPlace.name}
-          </Text>
+          </Animated.Text>
           {targetPlace.address && (
-            <Text style={[styles.placeAddress, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+            <Animated.Text style={[styles.placeAddress, { color: isDark ? '#8E8E93' : '#6E6E73' }, placeNameAnimatedStyle]}>
               {targetPlace.address}
-            </Text>
+            </Animated.Text>
           )}
         </View>
-      </Animated.View>
+      </View>
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity
@@ -183,7 +243,7 @@ export default function ArrivalScreen() {
           onPress={handleChooseAnother}
         >
           <Text style={[styles.buttonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            Choose Another Destination
+            Try Another Place
           </Text>
         </TouchableOpacity>
       </View>
@@ -201,6 +261,8 @@ const styles = StyleSheet.create({
   content: {
     alignItems: 'center',
     marginBottom: 60,
+    width: '100%',
+    flexShrink: 0, // Prevent shrinking
   },
   photoContainer: {
     width: Dimensions.get('window').width - 40,

@@ -10,28 +10,21 @@ interface ConfettiAnimationProps {
 }
 
 export function ConfettiAnimation({ trigger }: ConfettiAnimationProps) {
-  const [showConfetti, setShowConfetti] = React.useState(false);
   const { width, height } = useWindowDimensions();
 
-  useEffect(() => {
-    if (trigger > 0) {
-      setShowConfetti(true);
-      const timer = setTimeout(() => {
-        setShowConfetti(false);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [trigger]);
-
-  if (!showConfetti) return null;
+  // Render immediately when trigger > 0, no state delay
+  if (trigger === 0) return null;
 
   return (
     <View style={styles.container} pointerEvents="none">
       <ConfettiCannon
-        count={200}
+        key={trigger} // Force fresh instance on each trigger
+        count={100}
         origin={{ x: width / 2, y: height / 2 }}
         fadeOut
         autoStart
+        explosionSpeed={350}
+        fallSpeed={2000}
       />
     </View>
   );

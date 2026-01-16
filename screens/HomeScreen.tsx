@@ -107,7 +107,7 @@ export default function HomeScreen() {
     }
   };
 
-  const handleLongPressLogo = async () => {
+  const handleClearStorage = async () => {
     if (__DEV__) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       await clearAllStorage();
@@ -183,7 +183,6 @@ export default function HomeScreen() {
         )}
         {!hasPurchased && <View style={styles.headerLeft} />}
         <TouchableOpacity
-          onLongPress={handleLongPressLogo}
           activeOpacity={1}
           style={styles.titleContainer}
         >
@@ -252,6 +251,23 @@ export default function HomeScreen() {
           </Text>
         </TouchableOpacity>
       </Animated.View>
+
+      {__DEV__ && (
+        <TouchableOpacity
+          style={[
+            styles.debugButton,
+            {
+              backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+              borderColor: '#FF9500',
+            },
+          ]}
+          onPress={handleClearStorage}
+        >
+          <Text style={[styles.debugButtonText, { color: '#FF9500' }]}>
+            🧪 Clear Storage (Debug)
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -357,6 +373,20 @@ const styles = StyleSheet.create({
   },
   inviteButtonText: {
     fontSize: 16,
+    fontWeight: '600',
+  },
+  debugButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginBottom: 20,
+    marginHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+  },
+  debugButtonText: {
+    fontSize: 14,
     fontWeight: '600',
   },
 });
