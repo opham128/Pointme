@@ -3,6 +3,7 @@ import { Place } from '../types';
 
 const ARRIVAL_HISTORY_KEY = '@pointme:arrival_history';
 const ARRIVAL_COUNT_KEY = '@pointme:arrival_count';
+const DISTANCE_PREFERENCES_KEY = '@pointme:distance_preferences';
 
 export interface ArrivalHistoryItem {
   place: Place;
@@ -102,6 +103,39 @@ export async function clearAllStorage(): Promise<void> {
     console.log('All storage cleared');
   } catch (error) {
     console.error('Error clearing all storage:', error);
+  }
+}
+
+export interface DistancePreferences {
+  minDistanceMiles?: number; // Optional minimum distance in miles
+  maxDistanceMiles?: number; // Optional maximum distance in miles
+  enabled: boolean; // Whether distance filtering is enabled
+}
+
+/**
+ * Get distance preferences for paid users
+ */
+export async function getDistancePreferences(): Promise<DistancePreferences> {
+  try {
+    const data = await AsyncStorage.getItem(DISTANCE_PREFERENCES_KEY);
+    if (data) {
+      return JSON.parse(data);
+    }
+    return { enabled: false };
+  } catch (error) {
+    console.error('Error getting distance preferences:', error);
+    return { enabled: false };
+  }
+}
+
+/**
+ * Save distance preferences for paid users
+ */
+export async function saveDistancePreferences(preferences: DistancePreferences): Promise<void> {
+  try {
+    await AsyncStorage.setItem(DISTANCE_PREFERENCES_KEY, JSON.stringify(preferences));
+  } catch (error) {
+    console.error('Error saving distance preferences:', error);
   }
 }
 

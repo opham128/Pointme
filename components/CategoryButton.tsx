@@ -6,6 +6,13 @@ import {
   View,
   useColorScheme,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withSequence,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { Category } from '../types';
 import { CATEGORIES } from '../constants';
 
@@ -14,51 +21,130 @@ interface CategoryButtonProps {
   onPress: (category: Category) => void;
 }
 
+const ACCENT_COLOR = '#007AFF';
+const RANDOM_GRADIENT_START = '#007AFF';
+const RANDOM_GRADIENT_END = '#5856D6';
+
 export function CategoryButton({ category, onPress }: CategoryButtonProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const categoryInfo = CATEGORIES[category];
+  const isRandom = category === 'random';
+  
+  // Animation for press
+  const scale = useSharedValue(1);
+  const glow = useSharedValue(0);
 
-  return (
-    <TouchableOpacity
-      style={[
-        styles.button,
-        {
-          backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF',
-          borderColor: isDark ? '#3A3A3C' : '#E5E5EA',
-        },
-      ]}
-      onPress={() => onPress(category)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.content}>
-        <Text style={styles.emoji}>{categoryInfo.emoji}</Text>
-        <Text
+  const handlePress = () => {
+    // Haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Scale animation
+    scale.value = withSequence(
+      withSpring(0.97, { damping: 15, stiffness: 300 }),
+      withSpring(1, { damping: 15, stiffness: 300 })
+    );
+    
+    // Glow animation for Random
+    if (isRandom) {
+      glow.value = withSequence(
+        withSpring(1, { damping: 10 }),
+        withSpring(0, { damping: 10 })
+      );
+    }
+    
+    onPress(category);
+  };
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+    };
+  });
+
+  const glowStyle = useAnimatedStyle(() => {
+    if (!isRandom) return {};
+    return {
+      shadowOpacity: 0.3 + glow.value * 0.3,
+      shadowRadius: 8 + glow.value * 8,
+    };
+  });
+
+  // Random button with accent color but same size
+  if (isRandom) {
+    return (
+      <Animated.View style={[animatedStyle, glowStyle]}>
+        <TouchableOpacity
           style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' },
+            styles.button,
+            {
+              backgroundColor: isDark ? '#232325' : '#F8F8F8',
+              borderColor: ACCENT_COLOR,
+              borderWidth: 2,
+            },
           ]}
+          onPress={handlePress}
+          activeOpacity={0.8}
         >
-          {categoryInfo.label}
-        </Text>
-      </View>
-    </TouchableOpacity>
+          <View style={styles.content}>
+            <Text style={styles.emoji}>{categoryInfo.emoji}</Text>
+            <Text
+              style={[
+                styles.label,
+                { color: isDark ? '#FFFFFF' : '#000000' },
+              ]}
+            >
+              {categoryInfo.label}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }
+
+  // Regular button styling
+  return (
+    <Animated.View style={animatedStyle}>
+      <TouchableOpacity
+        style={[
+          styles.button,
+          {
+            backgroundColor: isDark ? '#232325' : '#F8F8F8',
+            borderColor: isDark ? '#3A3A3C' : '#E5E5EA',
+          },
+        ]}
+        onPress={handlePress}
+        activeOpacity={0.8}
+      >
+        <View style={styles.content}>
+          <Text style={styles.emoji}>{categoryInfo.emoji}</Text>
+          <Text
+            style={[
+              styles.label,
+              { color: isDark ? '#FFFFFF' : '#000000' },
+            ]}
+          >
+            {categoryInfo.label}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
     padding: 20,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    marginVertical: 8,
+    marginVertical: 6,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
     elevation: 3,
   },
   content: {
@@ -67,12 +153,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emoji: {
-    fontSize: 24,
-    marginRight: 12,
+    fontSize: 28,
+    marginRight: 14,
   },
   label: {
     fontSize: 18,
     fontWeight: '600',
   },
 });
-

@@ -34,7 +34,7 @@ export const GOOGLE_PLACES_API_BASE_URL = 'https://maps.googleapis.com/maps/api/
 
 // Monetization
 export const FREE_LOCATIONS_LIMIT = 5; // Number of free locations before paywall
-export const PURCHASE_PRICE = 2.99; // Price in USD
+export const PURCHASE_PRICE = 1.99; // Price in USD
 
 
 export { Category };

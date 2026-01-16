@@ -41,39 +41,47 @@ async function searchWithRadius(
 ): Promise<any[]> {
   const placeIdMap = new Map<string, any>();
   
-  if (category === 'random') {
-    const randomQueries = [
-      'attractions',
-      'things to do',
-      'fun activities',
-      'tourist attractions',
-      'points of interest'
-    ];
-    const randomQuery = randomQueries[Math.floor(Math.random() * randomQueries.length)];
-    const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(randomQuery)}&location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&key=${GOOGLE_PLACES_API_KEY}`;
-    const textResponse = await fetch(textSearchUrl);
-    const textData = await textResponse.json();
+  try {
+    let response: Response;
     
-    if (textData.status === 'OK' && textData.results) {
-      textData.results.forEach((place: any) => {
-        if (place.place_id) {
-          placeIdMap.set(place.place_id, place);
-        }
-      });
+    if (category === 'random') {
+      const randomQueries = [
+        'attractions',
+        'things to do',
+        'fun activities',
+        'tourist attractions',
+        'points of interest'
+      ];
+      const randomQuery = randomQueries[Math.floor(Math.random() * randomQueries.length)];
+      const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(randomQuery)}&location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&key=${GOOGLE_PLACES_API_KEY}`;
+      response = await fetch(textSearchUrl);
+    } else {
+      // Use Nearby Search for all categories (including bars)
+      const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&type=${categoryInfo.googleType}&key=${GOOGLE_PLACES_API_KEY}`;
+      response = await fetch(url);
     }
-  } else {
-    // Use Nearby Search for all categories (including bars)
-    const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&type=${categoryInfo.googleType}&key=${GOOGLE_PLACES_API_KEY}`;
-    const response = await fetch(url);
+    
+    // Check if fetch failed (network error)
+    if (!response.ok) {
+      throw new Error('Network request failed. Please check your internet connection.');
+    }
+    
     const data = await response.json();
     
     if (data.status === 'OK' && data.results) {
-      data.results.forEach((place: any) => {
+      const results = category === 'random' ? data.results : data.results;
+      results.forEach((place: any) => {
         if (place.place_id) {
           placeIdMap.set(place.place_id, place);
         }
       });
     }
+  } catch (error: any) {
+    // Check if it's a network error
+    if (error.message?.includes('Network') || error.message?.includes('fetch') || error.name === 'TypeError') {
+      throw new Error('No internet connection. Please check your network and try again.');
+    }
+    throw error;
   }
   
   return Array.from(placeIdMap.values());
@@ -86,11 +94,13 @@ async function searchWithRadius(
  * 
  * @param userLocation User's current location
  * @param category Category to search for
+ * @param distancePreferences Optional distance filtering for paid users
  * @returns The nearest place or null if not found
  */
 export async function findNearestPlace(
   userLocation: Location,
-  category: Category
+  category: Category,
+  distancePreferences?: { minDistanceMiles?: number; maxDistanceMiles?: number; enabled: boolean }
 ): Promise<Place | null> {
   if (!GOOGLE_PLACES_API_KEY) {
     throw new Error('Google Places API key is not configured. Please set GOOGLE_PLACES_API_KEY in your .env file.');
@@ -189,11 +199,38 @@ export async function findNearestPlace(
         return null;
       }
 
+      // Apply distance filtering for paid users if enabled
+      let filteredPlaces = placesWithDistance;
+      if (distancePreferences?.enabled) {
+        const minDistanceMeters = distancePreferences.minDistanceMiles 
+          ? distancePreferences.minDistanceMiles * 1609.34 
+          : 0;
+        const maxDistanceMeters = distancePreferences.maxDistanceMiles 
+          ? distancePreferences.maxDistanceMiles * 1609.34 
+          : Infinity;
+        
+        filteredPlaces = placesWithDistance.filter(place => {
+          const inRange = place.distance >= minDistanceMeters && place.distance <= maxDistanceMeters;
+          if (!inRange) {
+            console.log(`Filtered out ${place.name} - distance ${Math.round(place.distance)}m is outside range (${Math.round(minDistanceMeters)}m - ${maxDistanceMeters === Infinity ? '∞' : Math.round(maxDistanceMeters)}m)`);
+          }
+          return inRange;
+        });
+        
+        console.log(`Distance filtering: ${placesWithDistance.length} places → ${filteredPlaces.length} places in range`);
+      }
+
+      // Check if all results were filtered out by distance preferences
+      if (filteredPlaces.length === 0) {
+        console.log('All results were filtered out by distance preferences.');
+        return null;
+      }
+
       // Sort by distance to find the nearest
-      placesWithDistance.sort((a: PlaceWithDistance, b: PlaceWithDistance) => a.distance - b.distance);
+      filteredPlaces.sort((a: PlaceWithDistance, b: PlaceWithDistance) => a.distance - b.distance);
 
       console.log('\n=== All Places Found (sorted by distance) ===');
-      placesWithDistance.forEach((p: PlaceWithDistance, index: number) => {
+      filteredPlaces.forEach((p: PlaceWithDistance, index: number) => {
         console.log(`${index + 1}. ${p.name}`);
         console.log(`   Distance: ${Math.round(p.distance)}m`);
         console.log(`   Address: ${p.address || 'N/A'}`);
@@ -203,7 +240,7 @@ export async function findNearestPlace(
       });
 
       // Get the nearest place (first after sorting)
-      const nearestPlace = placesWithDistance[0];
+      const nearestPlace = filteredPlaces[0];
       console.log('=== Selected Nearest Place ===');
       console.log('Name:', nearestPlace.name);
       console.log('Distance:', Math.round(nearestPlace.distance), 'm');
@@ -234,8 +271,18 @@ export async function findNearestPlace(
     }
 
     return null;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching nearest place:', error);
+    
+    // Check if it's a network/offline error
+    if (error?.message?.toLowerCase().includes('internet') || 
+        error?.message?.toLowerCase().includes('network') ||
+        error?.name === 'TypeError' ||
+        error?.message?.includes('fetch')) {
+      throw new Error('No internet connection. Please check your network and try again.');
+    }
+    
+    // Re-throw the original error if it's not a network error
     throw error;
   }
 }

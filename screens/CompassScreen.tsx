@@ -13,6 +13,7 @@ import { useAppContext } from '../context/AppContext';
 import { useHeading } from '../hooks/useHeading';
 import { useNearestPlace } from '../hooks/useNearestPlace';
 import { useDistance } from '../hooks/useDistance';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { calculateBearing } from '../services/googlePlaces';
 import { CompassNeedle } from '../components/CompassNeedle';
 import { ARRIVAL_DISTANCE_THRESHOLD, FREE_LOCATIONS_LIMIT } from '../constants';
@@ -24,8 +25,9 @@ export default function CompassScreen() {
   const router = useRouter();
   const { selectedCategory, userLocation, setTargetPlace, arrivalCount, hasPurchased } = useAppContext();
   const heading = useHeading(true);
-  const { place, loading, error } = useNearestPlace(userLocation, selectedCategory, !!userLocation);
+  const { place, loading, error, refetch } = useNearestPlace(userLocation, selectedCategory, !!userLocation);
   const { distanceMeters, distanceFeet } = useDistance(userLocation, place?.location || null);
+  const isOnline = useNetworkStatus();
   const [hasArrived, setHasArrived] = useState(false);
   const hasAlignedRef = useRef(false); // Track if we've already triggered alignment haptic
 
@@ -120,22 +122,38 @@ export default function CompassScreen() {
   }
 
   if (error || !place) {
+    const isOfflineError = error?.message?.toLowerCase().includes('internet') || 
+                          error?.message?.toLowerCase().includes('network') ||
+                          !isOnline;
+    
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
         <Text style={[styles.errorTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-          No Places Found
+          {isOfflineError ? 'No Internet Connection' : 'No Places Found'}
         </Text>
         <Text style={[styles.errorText, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
-          {error?.message || 'Could not find any nearby places. Try a different category.'}
+          {isOfflineError 
+            ? 'Please check your internet connection and try again.'
+            : error?.message || 'Could not find any nearby places. Try a different category.'}
         </Text>
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}
-          onPress={() => router.back()}
-        >
-          <Text style={[styles.buttonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            Go Back
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          {isOfflineError && (
+            <TouchableOpacity
+              style={[styles.button, styles.retryButton, { backgroundColor: '#007AFF' }]}
+              onPress={() => refetch()}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}
+            onPress={() => router.back()}
+          >
+            <Text style={[styles.buttonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+              Go Back
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -263,10 +281,33 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     paddingHorizontal: 20,
   },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    paddingHorizontal: 20,
+  },
   button: {
+    flex: 1,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
+    alignItems: 'center',
+  },
+  retryButton: {
+    shadowColor: '#007AFF',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   buttonText: {
     fontSize: 16,

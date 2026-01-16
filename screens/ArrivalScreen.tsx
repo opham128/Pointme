@@ -80,42 +80,14 @@ export default function ArrivalScreen() {
     const { latitude, longitude } = targetPlace.location;
     const placeName = encodeURIComponent(targetPlace.name);
     
-    // Try to open in Google Maps app first, then fall back to web
-    let appUrl: string | null = null;
+    // Use web URL that works through Safari
     let webUrl: string;
-    
-    if (Platform.OS === 'ios') {
-      // iOS: Use comgooglemaps:// URL scheme for Google Maps app
-      // Format: comgooglemaps://?q=query&center=lat,lng
-      appUrl = `comgooglemaps://?q=${placeName}&center=${latitude},${longitude}`;
-    } else if (Platform.OS === 'android') {
-      // Android: Use geo: URI scheme (opens in default maps app, usually Google Maps)
-      // Format: geo:lat,lng?q=lat,lng(label)
-      appUrl = `geo:${latitude},${longitude}?q=${latitude},${longitude}(${placeName})`;
-    }
-    
-    // Web fallback URL (always available)
     if (targetPlace.placeId) {
       webUrl = `https://www.google.com/maps/search/?api=1&query=${placeName}&query_place_id=${targetPlace.placeId}`;
     } else {
-      webUrl = `https://www.google.com/maps/search/?api=1&query=${placeName}&query_place_id=${latitude},${longitude}`;
-    }
-
-    // Try to open in native app first
-    if (appUrl) {
-      try {
-        const canOpen = await Linking.canOpenURL(appUrl);
-        if (canOpen) {
-          await Linking.openURL(appUrl);
-          return;
-        }
-      } catch (err) {
-        // App not installed, continue to web fallback
-        console.log('Google Maps app not available, using web version');
-      }
+      webUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
     }
     
-    // Fallback to web version
     Linking.openURL(webUrl).catch((err) => {
       console.error('Failed to open Google Maps:', err);
     });
