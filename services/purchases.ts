@@ -277,3 +277,22 @@ export async function hasPurchasedFullApp(): Promise<boolean> {
   const status = await getPurchaseStatus();
   return status.hasPurchased;
 }
+
+/**
+ * Debug function to toggle purchase status (dev only)
+ */
+export async function togglePurchaseStatusDebug(): Promise<boolean> {
+  if (!__DEV__) {
+    throw new Error('This function is only available in development mode');
+  }
+  
+  const currentStatus = await getPurchaseStatus();
+  const newStatus: PurchaseStatus = {
+    hasPurchased: !currentStatus.hasPurchased,
+    purchaseDate: !currentStatus.hasPurchased ? Date.now() : undefined,
+    transactionId: !currentStatus.hasPurchased ? 'debug-transaction-id' : undefined,
+  };
+  
+  await savePurchaseStatus(newStatus);
+  return newStatus.hasPurchased;
+}

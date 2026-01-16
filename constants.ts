@@ -28,7 +28,7 @@ export const CATEGORIES: Record<Category, { label: string; emoji: string; google
   },
 };
 
-export const ARRIVAL_DISTANCE_THRESHOLD = 25; // meters
+export const ARRIVAL_DISTANCE_THRESHOLD = 82; // feet (approximately 25 meters)
 
 export const GOOGLE_PLACES_API_BASE_URL = 'https://maps.googleapis.com/maps/api/place';
 

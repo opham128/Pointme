@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Share,
+  TextInput,
+  Switch,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -26,6 +28,8 @@ import { CategoryButton } from '../components/CategoryButton';
 import { useAppContext } from '../context/AppContext';
 import { useLocation } from '../hooks/useLocation';
 import { clearAllStorage } from '../services/storage';
+import { togglePurchaseStatusDebug } from '../services/purchases';
+import { getDistancePreferences, saveDistancePreferences, DistancePreferences } from '../services/storage';
 
 const ACCENT_COLOR = '#007AFF';
 
@@ -33,8 +37,36 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
-  const { setSelectedCategory, setUserLocation, arrivalCount, hasPurchased, refreshHistory } = useAppContext();
+  const { setSelectedCategory, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus } = useAppContext();
   const { location, loading, error, permissionGranted, requestPermission } = useLocation();
+  
+  // Distance filtering state (for paid users)
+  const [distanceEnabled, setDistanceEnabled] = useState(false);
+  const [minDistance, setMinDistance] = useState('');
+  const [maxDistance, setMaxDistance] = useState('');
+  
+  // Load distance preferences for paid users
+  useEffect(() => {
+    if (hasPurchased) {
+      getDistancePreferences().then((prefs) => {
+        setDistanceEnabled(prefs.enabled);
+        setMinDistance(prefs.minDistanceMiles?.toString() || '');
+        setMaxDistance(prefs.maxDistanceMiles?.toString() || '');
+      });
+    }
+  }, [hasPurchased]);
+  
+  // Auto-save distance preferences when changed
+  useEffect(() => {
+    if (hasPurchased && (distanceEnabled || minDistance || maxDistance)) {
+      const prefs: DistancePreferences = {
+        enabled: distanceEnabled,
+        minDistanceMiles: minDistance ? parseFloat(minDistance) : undefined,
+        maxDistanceMiles: maxDistance ? parseFloat(maxDistance) : undefined,
+      };
+      saveDistancePreferences(prefs);
+    }
+  }, [distanceEnabled, minDistance, maxDistance, hasPurchased]);
   
   // Animation values
   const titleOpacity = useSharedValue(0);
@@ -116,6 +148,19 @@ export default function HomeScreen() {
     }
   };
 
+  const handleTogglePurchase = async () => {
+    if (__DEV__) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      try {
+        const newStatus = await togglePurchaseStatusDebug();
+        await refreshPurchaseStatus();
+        alert(`Purchase status: ${newStatus ? 'PAID USER' : 'FREE USER'}`);
+      } catch (error) {
+        alert('Error toggling purchase status');
+      }
+    }
+  };
+
   // Animated styles
   const titleAnimatedStyle = useAnimatedStyle(() => ({
     opacity: titleOpacity.value,
@@ -171,17 +216,7 @@ export default function HomeScreen() {
     <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
 
       <View style={styles.header}>
-        {hasPurchased && (
-          <TouchableOpacity
-            style={[styles.settingsButton, { backgroundColor: isDark ? '#1C1C1E' : '#E5E5EA' }]}
-            onPress={() => router.push('/settings')}
-          >
-            <Text style={[styles.settingsButtonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-              ⚙️
-            </Text>
-          </TouchableOpacity>
-        )}
-        {!hasPurchased && <View style={styles.headerLeft} />}
+        <View style={styles.headerLeft} />
         <TouchableOpacity
           activeOpacity={1}
           style={styles.titleContainer}
@@ -230,6 +265,68 @@ export default function HomeScreen() {
             onPress={handleCategorySelect}
           />
         ))}
+        
+        {/* Distance Filter (Paid Users Only) */}
+        {hasPurchased && (
+          <View style={[styles.distanceFilterContainer, { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }]}>
+            <View style={styles.distanceFilterHeader}>
+              <Text style={[styles.distanceFilterLabel, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+                📏 Distance Filter
+              </Text>
+              <Switch
+                value={distanceEnabled}
+                onValueChange={setDistanceEnabled}
+                trackColor={{ false: isDark ? '#2C2C2E' : '#E5E5EA', true: '#007AFF' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            {distanceEnabled && (
+              <View style={styles.distanceInputsRow}>
+                <View style={styles.distanceInputContainer}>
+                  <Text style={[styles.distanceInputLabel, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+                    Min (mi)
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.distanceInput,
+                      {
+                        backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF',
+                        color: isDark ? '#FFFFFF' : '#000000',
+                        borderColor: isDark ? '#3A3A3C' : '#E5E5EA',
+                      },
+                    ]}
+                    value={minDistance}
+                    onChangeText={setMinDistance}
+                    placeholder="0.5"
+                    placeholderTextColor={isDark ? '#8E8E93' : '#6E6E73'}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <Text style={[styles.distanceSeparator, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>to</Text>
+                <View style={styles.distanceInputContainer}>
+                  <Text style={[styles.distanceInputLabel, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+                    Max (mi)
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.distanceInput,
+                      {
+                        backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF',
+                        color: isDark ? '#FFFFFF' : '#000000',
+                        borderColor: isDark ? '#3A3A3C' : '#E5E5EA',
+                      },
+                    ]}
+                    value={maxDistance}
+                    onChangeText={setMaxDistance}
+                    placeholder="2.0"
+                    placeholderTextColor={isDark ? '#8E8E93' : '#6E6E73'}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       <Animated.View style={inviteAnimatedStyle}>
@@ -253,20 +350,36 @@ export default function HomeScreen() {
       </Animated.View>
 
       {__DEV__ && (
-        <TouchableOpacity
-          style={[
-            styles.debugButton,
-            {
-              backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
-              borderColor: '#FF9500',
-            },
-          ]}
-          onPress={handleClearStorage}
-        >
-          <Text style={[styles.debugButtonText, { color: '#FF9500' }]}>
-            🧪 Clear Storage (Debug)
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.debugContainer}>
+          <TouchableOpacity
+            style={[
+              styles.debugButton,
+              {
+                backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+                borderColor: '#FF9500',
+              },
+            ]}
+            onPress={handleClearStorage}
+          >
+            <Text style={[styles.debugButtonText, { color: '#FF9500' }]}>
+              🧪 Clear Storage
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.debugButton,
+              {
+                backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+                borderColor: hasPurchased ? '#34C759' : '#FF9500',
+              },
+            ]}
+            onPress={handleTogglePurchase}
+          >
+            <Text style={[styles.debugButtonText, { color: hasPurchased ? '#34C759' : '#FF9500' }]}>
+              {hasPurchased ? '✅ Paid User' : '🔓 Free User'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -287,14 +400,6 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     width: 100,
-  },
-  settingsButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  settingsButtonText: {
-    fontSize: 20,
   },
   titleContainer: {
     position: 'absolute',
@@ -325,7 +430,49 @@ const styles = StyleSheet.create({
     fontSize: 18,
     textAlign: 'center',
     paddingTop: 30,
-    marginBottom: 50,
+    marginBottom: 20,
+  },
+  distanceFilterContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  distanceFilterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  distanceFilterLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  distanceInputsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  distanceInputContainer: {
+    flex: 1,
+  },
+  distanceInputLabel: {
+    fontSize: 12,
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  distanceInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  distanceSeparator: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 20,
   },
   scrollView: {
     flex: 1,
@@ -375,12 +522,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  debugContainer: {
+    width: '100%',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+    gap: 10,
+  },
   debugButton: {
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
-    marginBottom: 20,
-    marginHorizontal: 20,
     alignItems: 'center',
     borderWidth: 1.5,
     borderStyle: 'dashed',

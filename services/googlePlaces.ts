@@ -12,7 +12,7 @@ const GOOGLE_PLACES_API_KEY = ENV_API_KEY || '';
  * Calculate the distance between two coordinates using the Haversine formula
  * @param loc1 First location
  * @param loc2 Second location
- * @returns Distance in meters
+ * @returns Distance in meters (converted to feet for display)
  */
 export function calculateDistance(loc1: Location, loc2: Location): number {
   const R = 6371e3; // Earth's radius in meters
@@ -116,12 +116,37 @@ export async function findNearestPlace(
     console.log('=== Progressive Radius Search ===');
     console.log('User location:', userLocation);
     console.log('Category:', categoryInfo.label);
+    if (distancePreferences?.enabled) {
+      console.log('Distance filter enabled:', {
+        min: distancePreferences.minDistanceMiles ? `${distancePreferences.minDistanceMiles} mi` : 'none',
+        max: distancePreferences.maxDistanceMiles ? `${distancePreferences.maxDistanceMiles} mi` : 'none',
+      });
+    }
     
-    // Search with progressively larger radii, stopping when we find results
-    // Since we sort by distance, results from a smaller radius will be closest
+    // Optimized search strategy:
+    // - For non-distance queries: Limit to 20 results, search progressively if all filtered out
+    // - For distance queries: Search progressively larger radii up to max distance needed
     const allResultsMap = new Map<string, any>();
+    const MAX_RESULTS_FOR_NON_DISTANCE = 20; // Limit results for efficiency when no distance filter
     
-    for (const radius of searchRadii) {
+    // Determine search radii based on distance preferences
+    let searchRadiiToUse: number[];
+    if (distancePreferences?.enabled && distancePreferences.maxDistanceMiles) {
+      // For distance queries: Search up to max distance
+      const maxMeters = distancePreferences.maxDistanceMiles * 1609.34;
+      searchRadiiToUse = [1000, 5000, 10000];
+      if (maxMeters > 10000) {
+        // Add intermediate radii and cap at 50km
+        const maxRadius = Math.min(maxMeters * 1.2, 50000);
+        searchRadiiToUse.push(maxRadius);
+      }
+    } else {
+      // For non-distance queries: Use standard progressive search (up to 10km)
+      searchRadiiToUse = searchRadii;
+    }
+    
+    // Search with progressive radii
+    for (const radius of searchRadiiToUse) {
       console.log(`Searching with radius: ${radius}m`);
       const results = await searchWithRadius(userLocation, radius, category, categoryInfo);
       
@@ -133,14 +158,16 @@ export async function findNearestPlace(
         }
       });
       
-      console.log(`  Found ${results.length} results (${newResults} new)`);
+      console.log(`  Found ${results.length} results (${newResults} new, ${allResultsMap.size} total)`);
       
-      // If we found results in this radius, break - we don't need to search larger radii
-      // since we'll sort by distance and the closest will be from this smaller radius
-      if (results.length > 0) {
-        console.log(`  Found results in ${radius}m radius, stopping search`);
+      // For non-distance queries: Stop when we have 20 results
+      // (We'll check later if they're all filtered out and search more if needed)
+      if (!distancePreferences?.enabled && allResultsMap.size >= MAX_RESULTS_FOR_NON_DISTANCE) {
+        console.log(`  Reached ${MAX_RESULTS_FOR_NON_DISTANCE} results, stopping search`);
         break;
       }
+      
+      // For distance queries: Continue searching all radii to find places in range
     }
     
     const allResults = Array.from(allResultsMap.values());
@@ -162,7 +189,7 @@ export async function findNearestPlace(
         name: string;
         location: Location;
         address?: string;
-        distance: number; // Required, always calculated
+        distance: number; // Required, always calculated in feet
         placeId?: string;
         rawPlace?: any;
       }
@@ -182,37 +209,93 @@ export async function findNearestPlace(
           latitude: place.geometry.location.lat,
           longitude: place.geometry.location.lng,
         };
-        const distance = calculateDistance(userLocation, placeLocation);
+        const distanceMeters = calculateDistance(userLocation, placeLocation);
+        const distanceFeet = distanceMeters * 3.28084; // Convert to feet for display
         return {
           name: place.name,
           location: placeLocation,
           address: place.vicinity || place.formatted_address,
-          distance,
+          distance: distanceFeet, // Store in feet
           placeId: place.place_id,
           rawPlace: place, // Keep original for debugging
         };
       });
 
-      // Check if all results were filtered out
-      if (placesWithDistance.length === 0) {
-        console.log('All results were filtered out (recent places). Returning null.');
+      // For non-distance queries: If all results were filtered out, search larger radius
+      if (placesWithDistance.length === 0 && !distancePreferences?.enabled) {
+        console.log('All results were filtered out (recent places). Searching larger radius...');
+        
+        // Try progressively larger radii until we find valid results or reach reasonable limit
+        const largerRadii = [20000, 30000]; // 20km, 30km
+        for (const largerRadius of largerRadii) {
+          console.log(`Searching with larger radius: ${largerRadius}m`);
+          const additionalResults = await searchWithRadius(userLocation, largerRadius, category, categoryInfo);
+          
+          // Process only NEW results (not already in allResultsMap)
+          const newPlacesWithDistance: PlaceWithDistance[] = additionalResults
+            .filter((place: any) => {
+              // Skip if already processed
+              if (allResultsMap.has(place.place_id)) {
+                return false;
+              }
+              // Skip if recent
+              if (place.place_id && recentPlaceIds.includes(place.place_id)) {
+                return false;
+              }
+              return true;
+            })
+            .map((place: any) => {
+              // Add to map for tracking
+              allResultsMap.set(place.place_id, place);
+              
+              const placeLocation: Location = {
+                latitude: place.geometry.location.lat,
+                longitude: place.geometry.location.lng,
+              };
+              const distanceMeters = calculateDistance(userLocation, placeLocation);
+              const distanceFeet = distanceMeters * 3.28084;
+              return {
+                name: place.name,
+                location: placeLocation,
+                address: place.vicinity || place.formatted_address,
+                distance: distanceFeet,
+                placeId: place.place_id,
+                rawPlace: place,
+              };
+            });
+          
+          if (newPlacesWithDistance.length > 0) {
+            placesWithDistance.push(...newPlacesWithDistance);
+            console.log(`Found ${newPlacesWithDistance.length} valid places in ${largerRadius}m radius`);
+            break; // Found valid results, stop searching
+          }
+        }
+        
+        if (placesWithDistance.length === 0) {
+          console.log('No valid places found even after searching larger radii. Returning null.');
+          return null;
+        }
+      } else if (placesWithDistance.length === 0) {
+        console.log('All results were filtered out. Returning null.');
         return null;
       }
 
       // Apply distance filtering for paid users if enabled
+      // Note: place.distance is now in feet, so convert miles to feet for comparison
       let filteredPlaces = placesWithDistance;
       if (distancePreferences?.enabled) {
-        const minDistanceMeters = distancePreferences.minDistanceMiles 
-          ? distancePreferences.minDistanceMiles * 1609.34 
+        const minDistanceFeet = distancePreferences.minDistanceMiles 
+          ? distancePreferences.minDistanceMiles * 5280 
           : 0;
-        const maxDistanceMeters = distancePreferences.maxDistanceMiles 
-          ? distancePreferences.maxDistanceMiles * 1609.34 
+        const maxDistanceFeet = distancePreferences.maxDistanceMiles 
+          ? distancePreferences.maxDistanceMiles * 5280 
           : Infinity;
         
         filteredPlaces = placesWithDistance.filter(place => {
-          const inRange = place.distance >= minDistanceMeters && place.distance <= maxDistanceMeters;
+          const inRange = place.distance >= minDistanceFeet && place.distance <= maxDistanceFeet;
           if (!inRange) {
-            console.log(`Filtered out ${place.name} - distance ${Math.round(place.distance)}m is outside range (${Math.round(minDistanceMeters)}m - ${maxDistanceMeters === Infinity ? '∞' : Math.round(maxDistanceMeters)}m)`);
+            const distanceMiles = place.distance / 5280;
+            console.log(`Filtered out ${place.name} - distance ${distanceMiles.toFixed(2)}mi is outside range (${distancePreferences.minDistanceMiles || 0}mi - ${distancePreferences.maxDistanceMiles || '∞'}mi)`);
           }
           return inRange;
         });
@@ -231,8 +314,9 @@ export async function findNearestPlace(
 
       console.log('\n=== All Places Found (sorted by distance) ===');
       filteredPlaces.forEach((p: PlaceWithDistance, index: number) => {
+        const distanceMiles = p.distance / 5280;
         console.log(`${index + 1}. ${p.name}`);
-        console.log(`   Distance: ${Math.round(p.distance)}m`);
+        console.log(`   Distance: ${Math.round(p.distance)}ft (${distanceMiles.toFixed(2)}mi)`);
         console.log(`   Address: ${p.address || 'N/A'}`);
         console.log(`   Location: ${p.location.latitude}, ${p.location.longitude}`);
         console.log(`   Place ID: ${p.placeId || 'N/A'}`);
@@ -241,9 +325,10 @@ export async function findNearestPlace(
 
       // Get the nearest place (first after sorting)
       const nearestPlace = filteredPlaces[0];
+      const nearestDistanceMiles = nearestPlace.distance / 5280;
       console.log('=== Selected Nearest Place ===');
       console.log('Name:', nearestPlace.name);
-      console.log('Distance:', Math.round(nearestPlace.distance), 'm');
+      console.log('Distance:', Math.round(nearestPlace.distance), 'ft (', nearestDistanceMiles.toFixed(2), 'mi)');
 
       // Extract photos from the raw place data
       let photos: string[] = [];

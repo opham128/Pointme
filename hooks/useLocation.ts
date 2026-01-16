@@ -61,7 +61,7 @@ export function useLocation(enabled: boolean = true): {
           {
             accuracy: Location.Accuracy.BestForNavigation,
             timeInterval: 1000, // Update every second
-            distanceInterval: 5, // Update every 5 meters
+            distanceInterval: 16, // Update every 16 feet (approximately 5 meters)
           },
           (newLocation) => {
             setLocation({

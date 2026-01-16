@@ -14,7 +14,7 @@ export interface Place {
   name: string;
   location: Location;
   address?: string;
-  distance?: number; // in meters
+  distance?: number; // in feet
   placeId?: string;
   photos?: string[]; // Array of photo URLs
 }

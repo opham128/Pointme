@@ -26,7 +26,7 @@ export default function CompassScreen() {
   const { selectedCategory, userLocation, setTargetPlace, arrivalCount, hasPurchased } = useAppContext();
   const heading = useHeading(true);
   const { place, loading, error, refetch } = useNearestPlace(userLocation, selectedCategory, !!userLocation);
-  const { distanceMeters, distanceFeet } = useDistance(userLocation, place?.location || null);
+  const { distanceFeet, distanceMiles } = useDistance(userLocation, place?.location || null);
   const isOnline = useNetworkStatus();
   const [hasArrived, setHasArrived] = useState(false);
   const hasAlignedRef = useRef(false); // Track if we've already triggered alignment haptic
@@ -38,9 +38,9 @@ export default function CompassScreen() {
     }
   }, [place, setTargetPlace]);
 
-  // Check for arrival
+  // Check for arrival (ARRIVAL_DISTANCE_THRESHOLD is in feet)
   useEffect(() => {
-    if (distanceMeters !== null && distanceMeters < ARRIVAL_DISTANCE_THRESHOLD && !hasArrived) {
+    if (distanceFeet !== null && distanceFeet < ARRIVAL_DISTANCE_THRESHOLD && !hasArrived) {
       setHasArrived(true);
       // Haptic feedback for arrival
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -49,7 +49,7 @@ export default function CompassScreen() {
         router.push('/arrival');
       }, 500);
     }
-  }, [distanceMeters, hasArrived, router]);
+  }, [distanceFeet, hasArrived, router]);
 
   // Redirect if no category selected
   useEffect(() => {
@@ -158,10 +158,10 @@ export default function CompassScreen() {
     );
   }
 
-  const displayDistance = distanceMeters
-    ? distanceMeters < 1000
-      ? `${Math.round(distanceMeters)}m`
-      : `${(distanceMeters / 1000).toFixed(2)}km`
+  const displayDistance = distanceFeet
+    ? distanceFeet < 5280 // Less than 1 mile (5280 feet)
+      ? `${Math.round(distanceFeet)}ft`
+      : `${distanceMiles?.toFixed(2) || (distanceFeet / 5280).toFixed(2)}mi`
     : '--';
 
   return (
@@ -206,16 +206,18 @@ export default function CompassScreen() {
       </View>
 
       {/* Test Arrival Button (for testing) */}
-      <TouchableOpacity
-        style={[styles.testButton, { backgroundColor: '#FF9500' }]}
-        onPress={() => {
-          setHasArrived(true);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          router.push('/arrival');
-        }}
-      >
-        <Text style={styles.testButtonText}>🧪 Test Arrival</Text>
-      </TouchableOpacity>
+      {__DEV__ && (
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#FF9500' }]}
+          onPress={() => {
+            setHasArrived(true);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            router.push('/arrival');
+          }}
+        >
+          <Text style={styles.testButtonText}>🧪 Test Arrival</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Back button */}
       <TouchableOpacity

@@ -8,33 +8,36 @@ import { calculateDistance } from '../services/googlePlaces';
  * 
  * @param from Starting location
  * @param to Target location
- * @returns Distance in meters and feet
+ * @returns Distance in feet and miles
  */
 export function useDistance(
   from: Location | null,
   to: Location | null
 ): {
-  distanceMeters: number | null;
   distanceFeet: number | null;
+  distanceMiles: number | null;
 } {
-  const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
   const [distanceFeet, setDistanceFeet] = useState<number | null>(null);
+  const [distanceMiles, setDistanceMiles] = useState<number | null>(null);
 
   useEffect(() => {
     if (!from || !to) {
-      setDistanceMeters(null);
       setDistanceFeet(null);
+      setDistanceMiles(null);
       return;
     }
 
-    const distance = calculateDistance(from, to);
-    setDistanceMeters(distance);
-    setDistanceFeet(distance * 3.28084); // Convert meters to feet
+    const distanceMeters = calculateDistance(from, to);
+    const feet = distanceMeters * 3.28084; // Convert meters to feet
+    const miles = feet / 5280; // Convert feet to miles
+    
+    setDistanceFeet(feet);
+    setDistanceMiles(miles);
   }, [from, to]);
 
   return {
-    distanceMeters,
     distanceFeet,
+    distanceMiles,
   };
 }
 
