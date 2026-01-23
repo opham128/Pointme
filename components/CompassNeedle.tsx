@@ -5,6 +5,7 @@ import Animated, {
   useSharedValue,
   withTiming,
   Easing,
+  SharedValue,
 } from 'react-native-reanimated';
 
 interface CompassNeedleProps {
@@ -14,6 +15,14 @@ interface CompassNeedleProps {
    * When this is 0, the needle points North
    */
   rotation: number;
+  /**
+   * Pulse scale animation value (for when close to destination)
+   */
+  pulseScale?: SharedValue<number>;
+  /**
+   * Pulse opacity animation value (for when close to destination)
+   */
+  pulseOpacity?: SharedValue<number>;
 }
 
 /**
@@ -34,11 +43,17 @@ function normalizeAngle(current: number, target: number): number {
   return current + diff;
 }
 
-export function CompassNeedle({ rotation }: CompassNeedleProps) {
+export function CompassNeedle({ rotation, pulseScale, pulseOpacity }: CompassNeedleProps) {
   const isDark = true; // Always dark mode
   
   // Use shared value for smooth animation
   const rotationValue = useSharedValue(rotation);
+  
+  // Default pulse values if not provided
+  const defaultPulseScale = useSharedValue(1);
+  const defaultPulseOpacity = useSharedValue(0.3);
+  const activePulseScale = pulseScale || defaultPulseScale;
+  const activePulseOpacity = pulseOpacity || defaultPulseOpacity;
 
   // Update rotation value when prop changes
   React.useEffect(() => {
@@ -58,10 +73,18 @@ export function CompassNeedle({ rotation }: CompassNeedleProps) {
       transform: [{ rotateZ: `${rotationValue.value}deg` }],
     };
   });
+  
+  // Animated style for pulsing glow
+  const pulseAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: activePulseScale.value }],
+      opacity: activePulseOpacity.value,
+    };
+  });
 
   return (
     <View style={styles.container}>
-      {/* Compass background circle */}
+      {/* Compass background circle with gradient effect */}
       <View
         style={[
           styles.compassCircle,
@@ -71,10 +94,19 @@ export function CompassNeedle({ rotation }: CompassNeedleProps) {
           },
         ]}
       >
+        {/* Pulsing glow ring (when close) */}
+        <Animated.View style={[styles.glowRing, pulseAnimatedStyle]} />
+        
+        {/* Outer glow ring (static) */}
+        <View style={styles.glowRingStatic} />
+        
         {/* North indicator */}
         <View style={[styles.northIndicator, { backgroundColor: '#FF3B30' }]} />
         
-        {/* Compass needle */}
+        {/* Center dot */}
+        <View style={styles.centerDot} />
+        
+        {/* Compass needle with enhanced design */}
         <Animated.View style={[styles.needleContainer, animatedStyle]}>
           <View style={[styles.needle, { backgroundColor: '#FF3B30' }]} />
           <View style={[styles.needleTail, { backgroundColor: '#8E8E93' }]} />
@@ -99,6 +131,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    shadowColor: '#FF3B30',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  glowRing: {
+    position: 'absolute',
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 59, 48, 0.6)',
+  },
+  glowRingStatic: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.2)',
   },
   northIndicator: {
     position: 'absolute',
@@ -107,20 +163,47 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 2,
   },
+  centerDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#FF3B30',
+    borderWidth: 2,
+    borderColor: '#1C1C1E',
+    zIndex: 10,
+    shadowColor: '#FF3B30',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 5,
+  },
   needleContainer: {
     position: 'absolute',
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 5,
   },
   needle: {
-    width: 4,
+    width: 5,
     height: 100,
-    borderRadius: 2,
+    borderRadius: 2.5,
     position: 'absolute',
     top: '50%',
     marginTop: -100,
+    backgroundColor: '#FF3B30',
+    shadowColor: '#FF3B30',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 5,
   },
   needleTail: {
     width: 4,
@@ -129,6 +212,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: '50%',
     marginBottom: -100,
+    backgroundColor: '#8E8E93',
+    opacity: 0.7,
+    shadowColor: '#8E8E93',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 3,
   },
 });
 

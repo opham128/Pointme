@@ -8,6 +8,14 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 import { useAppContext } from '../context/AppContext';
 import { useHeading } from '../hooks/useHeading';
 import { useNearestPlace } from '../hooks/useNearestPlace';
@@ -30,11 +38,62 @@ export default function CompassScreen() {
   const [hasArrived, setHasArrived] = useState(false);
   const hasAlignedRef = useRef(false); // Track if we've already triggered alignment haptic
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('feet');
+  const lastHapticTimeRef = useRef<number>(0);
+  
+  // Pulsing glow animation for when close
+  const pulseScale = useSharedValue(1);
+  const pulseOpacity = useSharedValue(0.3);
   
   // Load distance unit preference
   useEffect(() => {
     getDistanceUnit().then(setDistanceUnit);
   }, []);
+  
+  // Debug: simulate close distance for testing
+  const [debugCloseDistance, setDebugCloseDistance] = useState<number | null>(null);
+  
+  // Pulse animation and haptics when close (within 200 feet)
+  const CLOSE_DISTANCE_THRESHOLD = 200; // feet
+  const effectiveDistance = debugCloseDistance !== null ? debugCloseDistance : distanceFeet;
+  
+  useEffect(() => {
+    if (!effectiveDistance || effectiveDistance > CLOSE_DISTANCE_THRESHOLD || hasArrived) {
+      // Stop pulsing if too far or arrived
+      pulseScale.value = withTiming(1, { duration: 200 });
+      pulseOpacity.value = withTiming(0.3, { duration: 200 });
+      return;
+    }
+    
+    // Start pulsing - intensity increases as you get closer
+    const distanceRatio = 1 - (effectiveDistance / CLOSE_DISTANCE_THRESHOLD); // 0 to 1
+    const pulseIntensity = 0.3 + (distanceRatio * 0.4); // 0.3 to 0.7 opacity
+    const pulseSpeed = 800 - (distanceRatio * 400); // 800ms to 400ms (faster when closer)
+    
+    pulseScale.value = withRepeat(
+      withSequence(
+        withTiming(1.15, { duration: pulseSpeed / 2, easing: Easing.out(Easing.ease) }),
+        withTiming(1, { duration: pulseSpeed / 2, easing: Easing.in(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+    
+    pulseOpacity.value = withRepeat(
+      withSequence(
+        withTiming(pulseIntensity, { duration: pulseSpeed / 2, easing: Easing.out(Easing.ease) }),
+        withTiming(0.3, { duration: pulseSpeed / 2, easing: Easing.in(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+    
+    // Pulse haptic feedback (every 1.5 seconds when close)
+    const now = Date.now();
+    if (now - lastHapticTimeRef.current > 1500) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      lastHapticTimeRef.current = now;
+    }
+  }, [effectiveDistance, hasArrived]);
 
   // Update target place in context
   useEffect(() => {
@@ -199,7 +258,11 @@ export default function CompassScreen() {
     <View style={[styles.container, { backgroundColor: '#000000' }]}>
       {/* Compass */}
       <View style={styles.compassContainer}>
-        <CompassNeedle rotation={rotation} />
+        <CompassNeedle 
+          rotation={rotation} 
+          pulseScale={pulseScale}
+          pulseOpacity={pulseOpacity}
+        />
       </View>
 
       {/* Info Panel */}
@@ -236,18 +299,34 @@ export default function CompassScreen() {
         </View>
       </View>
 
-      {/* Test Arrival Button (for testing) */}
+      {/* Test Buttons (for testing) */}
       {__DEV__ && (
-        <TouchableOpacity
-          style={[styles.testButton, { backgroundColor: '#FF9500' }]}
-          onPress={() => {
-            setHasArrived(true);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            router.push('/arrival');
-          }}
-        >
-          <Text style={styles.testButtonText}>🧪 Test Arrival</Text>
-        </TouchableOpacity>
+        <View style={styles.debugContainer}>
+          <TouchableOpacity
+            style={[styles.testButton, { backgroundColor: '#FF9500' }]}
+            onPress={() => {
+              setHasArrived(true);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              router.push('/arrival');
+            }}
+          >
+            <Text style={styles.testButtonText}>🧪 Test Arrival</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.testButton, { backgroundColor: '#007AFF' }]}
+            onPress={() => {
+              if (debugCloseDistance === null) {
+                setDebugCloseDistance(100); // Simulate 100 feet away
+              } else {
+                setDebugCloseDistance(null); // Reset to actual distance
+              }
+            }}
+          >
+            <Text style={styles.testButtonText}>
+              {debugCloseDistance !== null ? '📍 Stop Pulse Test' : '📍 Test Pulse (100ft)'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Back button */}
@@ -356,6 +435,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  debugContainer: {
+    gap: 12,
+    marginBottom: 12,
+  },
+  testButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  testButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
   backButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
@@ -363,16 +456,6 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   backButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  testButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  testButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
