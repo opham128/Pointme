@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  useColorScheme,
   ActivityIndicator,
   TouchableOpacity,
   Share,
@@ -34,8 +33,7 @@ import { getDistancePreferences, saveDistancePreferences, DistancePreferences } 
 const ACCENT_COLOR = '#007AFF';
 
 export default function HomeScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = true; // Always dark mode
   const router = useRouter();
   const { setSelectedCategory, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus } = useAppContext();
   const { location, loading, error, permissionGranted, requestPermission } = useLocation();
@@ -55,6 +53,35 @@ export default function HomeScreen() {
       });
     }
   }, [hasPurchased]);
+  
+  // Handle distance filter toggle - reset values when disabled
+  const handleDistanceToggle = (value: boolean) => {
+    setDistanceEnabled(value);
+    if (!value) {
+      // Reset min and max when disabling
+      setMinDistance('');
+      setMaxDistance('');
+    }
+  };
+  
+  // Validate and limit to 2 decimal places
+  const handleDistanceChange = (value: string, setter: (value: string) => void) => {
+    // Remove any non-numeric characters except decimal point
+    let cleaned = value.replace(/[^0-9.]/g, '');
+    
+    // Ensure only one decimal point
+    const parts = cleaned.split('.');
+    if (parts.length > 2) {
+      cleaned = parts[0] + '.' + parts.slice(1).join('');
+    }
+    
+    // Limit to 2 decimal places
+    if (parts.length === 2 && parts[1].length > 2) {
+      cleaned = parts[0] + '.' + parts[1].substring(0, 2);
+    }
+    
+    setter(cleaned);
+  };
   
   // Auto-save distance preferences when changed
   useEffect(() => {
@@ -181,9 +208,9 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
-        <ActivityIndicator size="large" color={isDark ? '#FFFFFF' : '#000000'} />
-        <Text style={[styles.loadingText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+      <View style={[styles.container, { backgroundColor: '#000000' }]}>
+        <ActivityIndicator size="large" color="#FFFFFF" />
+        <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>
           Getting your location...
         </Text>
       </View>
@@ -192,11 +219,11 @@ export default function HomeScreen() {
 
   if (error || !permissionGranted) {
     return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
-        <Text style={[styles.errorTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+      <View style={[styles.container, { backgroundColor: '#000000' }]}>
+        <Text style={[styles.errorTitle, { color: '#FFFFFF' }]}>
           Location Permission Required
         </Text>
-        <Text style={[styles.errorText, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+        <Text style={[styles.errorText, { color: '#8E8E93' }]}>
           {error?.message || 'We need your location to find nearby places.'}
         </Text>
         <CategoryButton
@@ -205,7 +232,7 @@ export default function HomeScreen() {
             await requestPermission();
           }}
         />
-        <Text style={[styles.retryText, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+        <Text style={[styles.retryText, { color: '#8E8E93' }]}>
           Tap above to grant permission
         </Text>
       </View>
@@ -213,7 +240,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
 
       <View style={styles.header}>
         <View style={styles.headerLeft} />
@@ -224,7 +251,7 @@ export default function HomeScreen() {
           <Animated.Text 
             style={[
               styles.title, 
-              { color: isDark ? '#FFFFFF' : '#000000' },
+              { color: '#FFFFFF' },
               titleAnimatedStyle
             ]}
           >
@@ -236,7 +263,7 @@ export default function HomeScreen() {
             style={[
               styles.historyButton,
               { 
-                backgroundColor: isDark ? '#1C1C1E' : '#E5E5EA',
+                backgroundColor: '#1C1C1E',
                 borderColor: ACCENT_COLOR,
               },
             ]}
@@ -249,7 +276,7 @@ export default function HomeScreen() {
         </Animated.View>
       </View>
 
-      <Text style={[styles.subtitle, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+      <Text style={[styles.subtitle, { color: '#8E8E93' }]}>
         Choose a destination type
       </Text>
 
@@ -268,58 +295,58 @@ export default function HomeScreen() {
         
         {/* Distance Filter (Paid Users Only) */}
         {hasPurchased && (
-          <View style={[styles.distanceFilterContainer, { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }]}>
+          <View style={[styles.distanceFilterContainer, { backgroundColor: '#1C1C1E' }]}>
             <View style={styles.distanceFilterHeader}>
-              <Text style={[styles.distanceFilterLabel, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+              <Text style={[styles.distanceFilterLabel, { color: '#FFFFFF' }]}>
                 📏 Distance Filter
               </Text>
               <Switch
                 value={distanceEnabled}
-                onValueChange={setDistanceEnabled}
-                trackColor={{ false: isDark ? '#2C2C2E' : '#E5E5EA', true: '#007AFF' }}
+                onValueChange={handleDistanceToggle}
+                trackColor={{ false: '#2C2C2E', true: '#007AFF' }}
                 thumbColor="#FFFFFF"
               />
             </View>
             {distanceEnabled && (
               <View style={styles.distanceInputsRow}>
                 <View style={styles.distanceInputContainer}>
-                  <Text style={[styles.distanceInputLabel, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+                  <Text style={[styles.distanceInputLabel, { color: '#8E8E93' }]}>
                     Min (mi)
                   </Text>
                   <TextInput
                     style={[
                       styles.distanceInput,
                       {
-                        backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF',
-                        color: isDark ? '#FFFFFF' : '#000000',
-                        borderColor: isDark ? '#3A3A3C' : '#E5E5EA',
+                        backgroundColor: '#2C2C2E',
+                        color: '#FFFFFF',
+                        borderColor: '#3A3A3C',
                       },
                     ]}
                     value={minDistance}
-                    onChangeText={setMinDistance}
+                    onChangeText={(value) => handleDistanceChange(value, setMinDistance)}
                     placeholder="0.5"
-                    placeholderTextColor={isDark ? '#8E8E93' : '#6E6E73'}
+                    placeholderTextColor="#8E8E93"
                     keyboardType="decimal-pad"
                   />
                 </View>
-                <Text style={[styles.distanceSeparator, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>to</Text>
+                <Text style={[styles.distanceSeparator, { color: '#8E8E93' }]}>to</Text>
                 <View style={styles.distanceInputContainer}>
-                  <Text style={[styles.distanceInputLabel, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+                  <Text style={[styles.distanceInputLabel, { color: '#8E8E93' }]}>
                     Max (mi)
                   </Text>
                   <TextInput
                     style={[
                       styles.distanceInput,
                       {
-                        backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF',
-                        color: isDark ? '#FFFFFF' : '#000000',
-                        borderColor: isDark ? '#3A3A3C' : '#E5E5EA',
+                        backgroundColor: '#2C2C2E',
+                        color: '#FFFFFF',
+                        borderColor: '#3A3A3C',
                       },
                     ]}
                     value={maxDistance}
-                    onChangeText={setMaxDistance}
-                    placeholder="2.0"
-                    placeholderTextColor={isDark ? '#8E8E93' : '#6E6E73'}
+                    onChangeText={(value) => handleDistanceChange(value, setMaxDistance)}
+                    placeholder="10.0"
+                    placeholderTextColor="#8E8E93"
                     keyboardType="decimal-pad"
                   />
                 </View>
@@ -334,7 +361,7 @@ export default function HomeScreen() {
           style={[
             styles.inviteButton,
             {
-              backgroundColor: isDark ? 'transparent' : 'transparent',
+              backgroundColor: 'transparent',
               borderColor: ACCENT_COLOR,
             },
           ]}
@@ -355,7 +382,7 @@ export default function HomeScreen() {
             style={[
               styles.debugButton,
               {
-                backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+                backgroundColor: '#2C2C2E',
                 borderColor: '#FF9500',
               },
             ]}
@@ -369,7 +396,7 @@ export default function HomeScreen() {
             style={[
               styles.debugButton,
               {
-                backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+                backgroundColor: '#2C2C2E',
                 borderColor: hasPurchased ? '#34C759' : '#FF9500',
               },
             ]}

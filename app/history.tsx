@@ -1,12 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAppContext } from '../context/AppContext';
 import { clearArrivalHistory } from '../services/storage';
 
 export default function HistoryScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = true; // Always dark mode
   const router = useRouter();
   const { arrivalHistory, arrivalCount, refreshHistory } = useAppContext();
 
@@ -21,19 +20,19 @@ export default function HistoryScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
       <View style={styles.header}>
         <TouchableOpacity
-          style={[styles.backButton, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}
+          style={[styles.backButton, { backgroundColor: '#2C2C2E' }]}
           onPress={() => router.back()}
         >
-          <Text style={[styles.backButtonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>← Back</Text>
+          <Text style={[styles.backButtonText, { color: '#FFFFFF' }]}>← Back</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
         <View style={styles.statsContainer}>
-          <Text style={[styles.statsNumber, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+          <Text style={[styles.statsNumber, { color: '#FFFFFF' }]}>
             {arrivalCount}
           </Text>
           <Text style={[styles.statsLabel, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
@@ -41,7 +40,7 @@ export default function HistoryScreen() {
           </Text>
         </View>
 
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+        <Text style={[styles.sectionTitle, { color: '#FFFFFF' }]}>
           Recent Arrivals
         </Text>
 
@@ -61,7 +60,7 @@ export default function HistoryScreen() {
               ]}
             >
               <View style={styles.historyItemContent}>
-                <Text style={[styles.historyItemName, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+                <Text style={[styles.historyItemName, { color: '#FFFFFF' }]}>
                   {item.place.name}
                 </Text>
                 {item.place.address && (
@@ -79,7 +78,7 @@ export default function HistoryScreen() {
 
         {arrivalHistory.length > 0 && (
           <TouchableOpacity
-            style={[styles.clearButton, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}
+            style={[styles.clearButton, { backgroundColor: '#2C2C2E' }]}
             onPress={handleClearHistory}
           >
             <Text style={[styles.clearButtonText, { color: isDark ? '#FF3B30' : '#FF3B30' }]}>

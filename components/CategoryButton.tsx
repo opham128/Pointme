@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   View,
-  useColorScheme,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -26,8 +25,7 @@ const RANDOM_GRADIENT_START = '#007AFF';
 const RANDOM_GRADIENT_END = '#5856D6';
 
 export function CategoryButton({ category, onPress }: CategoryButtonProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = true; // Always dark mode
   const categoryInfo = CATEGORIES[category];
   const isRandom = category === 'random';
   
@@ -78,7 +76,7 @@ export function CategoryButton({ category, onPress }: CategoryButtonProps) {
           style={[
             styles.button,
             {
-              backgroundColor: isDark ? '#232325' : '#F8F8F8',
+              backgroundColor: '#232325',
               borderColor: ACCENT_COLOR,
               borderWidth: 2,
             },
@@ -91,7 +89,7 @@ export function CategoryButton({ category, onPress }: CategoryButtonProps) {
             <Text
               style={[
                 styles.label,
-                { color: isDark ? '#FFFFFF' : '#000000' },
+                { color: '#FFFFFF' },
               ]}
             >
               {categoryInfo.label}
@@ -110,7 +108,7 @@ export function CategoryButton({ category, onPress }: CategoryButtonProps) {
           styles.button,
           {
             backgroundColor: isDark ? '#232325' : '#F8F8F8',
-            borderColor: isDark ? '#3A3A3C' : '#E5E5EA',
+            borderColor: '#3A3A3C',
           },
         ]}
         onPress={handlePress}

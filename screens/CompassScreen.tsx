@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  useColorScheme,
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
@@ -18,10 +17,10 @@ import { calculateBearing } from '../services/googlePlaces';
 import { CompassNeedle } from '../components/CompassNeedle';
 import { ARRIVAL_DISTANCE_THRESHOLD, FREE_LOCATIONS_LIMIT } from '../constants';
 import { CATEGORIES } from '../constants';
+import { getDistanceUnit, saveDistanceUnit, DistanceUnit } from '../services/storage';
 
 export default function CompassScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = true; // Always dark mode
   const router = useRouter();
   const { selectedCategory, userLocation, setTargetPlace, arrivalCount, hasPurchased } = useAppContext();
   const heading = useHeading(true);
@@ -30,6 +29,12 @@ export default function CompassScreen() {
   const isOnline = useNetworkStatus();
   const [hasArrived, setHasArrived] = useState(false);
   const hasAlignedRef = useRef(false); // Track if we've already triggered alignment haptic
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('feet');
+  
+  // Load distance unit preference
+  useEffect(() => {
+    getDistanceUnit().then(setDistanceUnit);
+  }, []);
 
   // Update target place in context
   useEffect(() => {
@@ -59,7 +64,7 @@ export default function CompassScreen() {
   }, [selectedCategory, router]);
 
   // Calculate bearing from user to target location
-  const bearing = React.useMemo(() => {
+  const bearing = useMemo(() => {
     if (!userLocation || !place) return 0;
     return calculateBearing(userLocation, place.location);
   }, [userLocation?.latitude, userLocation?.longitude, place?.location.latitude, place?.location.longitude]);
@@ -71,7 +76,7 @@ export default function CompassScreen() {
   // When rotation = 0, target is straight ahead
   // When rotation = 90, target is to the right
   // When rotation = -90, target is to the left
-  const rotation = React.useMemo(() => {
+  const rotation = useMemo(() => {
     if (!place) return 0;
     
     let diff = bearing - heading;
@@ -106,15 +111,47 @@ export default function CompassScreen() {
     }
   }, [rotation, place, hasArrived]);
 
+  // Convert distance for display based on unit preference
+  // All calculations still use feet internally (distanceFeet stays in feet)
+  // MUST be called before any conditional returns (Rules of Hooks)
+  const displayDistance = useMemo(() => {
+    if (!distanceFeet) return '--';
+    
+    if (distanceUnit === 'meters') {
+      const distanceMeters = distanceFeet * 0.3048; // Convert feet to meters
+      if (distanceMeters < 1000) {
+        return `${Math.round(distanceMeters)}m`;
+      } else {
+        const distanceKm = distanceMeters / 1000;
+        return `${distanceKm.toFixed(2)}km`;
+      }
+    } else {
+      // Default to feet/miles
+      if (distanceFeet < 5280) { // Less than 1 mile
+        return `${Math.round(distanceFeet)}ft`;
+      } else {
+        return `${distanceMiles?.toFixed(2) || (distanceFeet / 5280).toFixed(2)}mi`;
+      }
+    }
+  }, [distanceFeet, distanceMiles, distanceUnit]);
+  
+  // Toggle distance unit
+  const handleToggleUnit = async () => {
+    const newUnit: DistanceUnit = distanceUnit === 'feet' ? 'meters' : 'feet';
+    setDistanceUnit(newUnit);
+    await saveDistanceUnit(newUnit);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   if (!selectedCategory) {
     return null;
   }
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
-        <ActivityIndicator size="large" color={isDark ? '#FFFFFF' : '#000000'} />
-        <Text style={[styles.loadingText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+      <View style={[styles.container, { backgroundColor: '#000000' }]}>
+        <ActivityIndicator size="large" color="#FFFFFF" />
+        <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>
           Finding nearest {CATEGORIES[selectedCategory].label.toLowerCase()}...
         </Text>
       </View>
@@ -127,11 +164,11 @@ export default function CompassScreen() {
                           !isOnline;
     
     return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
-        <Text style={[styles.errorTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+      <View style={[styles.container, { backgroundColor: '#000000' }]}>
+        <Text style={[styles.errorTitle, { color: '#FFFFFF' }]}>
           {isOfflineError ? 'No Internet Connection' : 'No Places Found'}
         </Text>
-        <Text style={[styles.errorText, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+        <Text style={[styles.errorText, { color: '#8E8E93' }]}>
           {isOfflineError 
             ? 'Please check your internet connection and try again.'
             : error?.message || 'Could not find any nearby places. Try a different category.'}
@@ -146,10 +183,10 @@ export default function CompassScreen() {
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}
+            style={[styles.button, { backgroundColor: '#2C2C2E' }]}
             onPress={() => router.back()}
           >
-            <Text style={[styles.buttonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
               Go Back
             </Text>
           </TouchableOpacity>
@@ -158,14 +195,8 @@ export default function CompassScreen() {
     );
   }
 
-  const displayDistance = distanceFeet
-    ? distanceFeet < 5280 // Less than 1 mile (5280 feet)
-      ? `${Math.round(distanceFeet)}ft`
-      : `${distanceMiles?.toFixed(2) || (distanceFeet / 5280).toFixed(2)}mi`
-    : '--';
-
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
       {/* Compass */}
       <View style={styles.compassContainer}>
         <CompassNeedle rotation={rotation} />
@@ -174,7 +205,7 @@ export default function CompassScreen() {
       {/* Info Panel */}
       <View style={styles.infoContainer}>
         <Text
-          style={[styles.distanceText, { color: isDark ? '#FFFFFF' : '#000000' }]}
+          style={[styles.distanceText, { color: '#FFFFFF' }]}
           numberOfLines={1}
         >
           {displayDistance}
@@ -185,7 +216,7 @@ export default function CompassScreen() {
           style={[
             styles.targetName,
             {
-              color: isDark ? '#8E8E93' : '#6E6E73',
+              color: '#8E8E93',
               opacity: hasArrived ? 1 : 0.3,
             },
           ]}
@@ -196,10 +227,10 @@ export default function CompassScreen() {
 
         {/* Heading info */}
         <View style={styles.headingInfo}>
-          <Text style={[styles.headingLabel, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+          <Text style={[styles.headingLabel, { color: '#8E8E93' }]}>
             Heading: {Math.round(heading)}°
           </Text>
-          <Text style={[styles.headingLabel, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+          <Text style={[styles.headingLabel, { color: '#8E8E93' }]}>
             Bearing: {Math.round(bearing)}°
           </Text>
         </View>
@@ -221,11 +252,21 @@ export default function CompassScreen() {
 
       {/* Back button */}
       <TouchableOpacity
-        style={[styles.backButton, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}
+        style={[styles.backButton, { backgroundColor: '#2C2C2E' }]}
         onPress={() => router.back()}
       >
-        <Text style={[styles.backButtonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+        <Text style={[styles.backButtonText, { color: '#FFFFFF' }]}>
           Choose Another
+        </Text>
+      </TouchableOpacity>
+      
+      {/* Distance unit toggle button (bottom right) */}
+      <TouchableOpacity
+        style={[styles.unitToggleButton, { backgroundColor: '#2C2C2E' }]}
+        onPress={handleToggleUnit}
+      >
+        <Text style={[styles.unitToggleText, { color: '#FFFFFF' }]}>
+          ft/m
         </Text>
       </TouchableOpacity>
     </View>
@@ -335,6 +376,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  unitToggleButton: {
+    position: 'absolute',
+    bottom: 40,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  unitToggleText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 

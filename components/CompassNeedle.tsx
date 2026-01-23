@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, useColorScheme } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -35,8 +35,7 @@ function normalizeAngle(current: number, target: number): number {
 }
 
 export function CompassNeedle({ rotation }: CompassNeedleProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = true; // Always dark mode
   
   // Use shared value for smooth animation
   const rotationValue = useSharedValue(rotation);
@@ -67,18 +66,18 @@ export function CompassNeedle({ rotation }: CompassNeedleProps) {
         style={[
           styles.compassCircle,
           {
-            borderColor: isDark ? '#3A3A3C' : '#E5E5EA',
-            backgroundColor: isDark ? '#1C1C1E' : '#F9F9F9',
+            borderColor: '#3A3A3C',
+            backgroundColor: '#1C1C1E',
           },
         ]}
       >
         {/* North indicator */}
-        <View style={[styles.northIndicator, { backgroundColor: isDark ? '#FF3B30' : '#FF3B30' }]} />
+        <View style={[styles.northIndicator, { backgroundColor: '#FF3B30' }]} />
         
         {/* Compass needle */}
         <Animated.View style={[styles.needleContainer, animatedStyle]}>
-          <View style={[styles.needle, { backgroundColor: isDark ? '#FF3B30' : '#FF3B30' }]} />
-          <View style={[styles.needleTail, { backgroundColor: isDark ? '#8E8E93' : '#8E8E93' }]} />
+          <View style={[styles.needle, { backgroundColor: '#FF3B30' }]} />
+          <View style={[styles.needleTail, { backgroundColor: '#8E8E93' }]} />
         </Animated.View>
       </View>
     </View>

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Location, Place, Category } from '../types';
 import { findNearestPlace } from '../services/googlePlaces';
 import { useNetworkStatus } from './useNetworkStatus';
-import { getDistancePreferences } from '../services/storage';
+import { getDistancePreferences, getCachedPlace, cachePlace, getRecentPlaceIds } from '../services/storage';
 import { useAppContext } from '../context/AppContext';
 
 /**
@@ -35,7 +35,7 @@ export function useNearestPlace(
   const hasFetchedRef = useRef<boolean>(false);
   const initialLocationRef = useRef<Location | null>(null);
 
-  const fetchNearestPlace = async () => {
+  const fetchNearestPlace = async (skipCache: boolean = false) => {
     if (!userLocation || !category || !enabled) {
       return;
     }
@@ -61,8 +61,44 @@ export function useNearestPlace(
         }
       }
 
+      // Check cache first (unless explicitly skipping)
+      if (!skipCache) {
+        const cachedPlace = await getCachedPlace(category, userLocation, distancePreferences);
+        if (cachedPlace !== undefined) {
+          // Check if cached place is in recent arrivals - if so, skip cache and fetch new
+          if (cachedPlace && cachedPlace.placeId) {
+            const recentPlaceIds = await getRecentPlaceIds();
+            if (recentPlaceIds.includes(cachedPlace.placeId)) {
+              // Cached place was already visited, skip cache and fetch new
+              console.log(`Cached place ${cachedPlace.name} was already visited, fetching new place`);
+            } else {
+              // Cache hit and not in recent arrivals - use it
+              setPlace(cachedPlace);
+              fetchedCategoryRef.current = category;
+              hasFetchedRef.current = true;
+              initialLocationRef.current = userLocation;
+              setLoading(false);
+              return;
+            }
+          } else {
+            // Cache hit but no place found (null) - use it
+            setPlace(cachedPlace);
+            fetchedCategoryRef.current = category;
+            hasFetchedRef.current = true;
+            initialLocationRef.current = userLocation;
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      // Cache miss or skipCache - fetch from API
       const nearestPlace = await findNearestPlace(userLocation, category, distancePreferences);
       setPlace(nearestPlace);
+      
+      // Cache the result
+      await cachePlace(category, userLocation, nearestPlace, distancePreferences);
+      
       fetchedCategoryRef.current = category;
       hasFetchedRef.current = true;
       initialLocationRef.current = userLocation;
@@ -111,7 +147,7 @@ export function useNearestPlace(
     place,
     loading,
     error,
-    refetch: fetchNearestPlace,
+    refetch: () => fetchNearestPlace(true), // Skip cache on manual refetch
   };
 }
 

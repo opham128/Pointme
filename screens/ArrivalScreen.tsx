@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  useColorScheme,
   TouchableOpacity,
   Linking,
   Platform,
@@ -26,8 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 export default function ArrivalScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = true; // Always dark mode
   const router = useRouter();
   const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory, arrivalCount, hasPurchased } = useAppContext();
   const [confettiTrigger, setConfettiTrigger] = useState(0);
@@ -159,7 +157,7 @@ export default function ArrivalScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
       <ConfettiAnimation trigger={confettiTrigger} />
 
       <View style={styles.content}>
@@ -194,7 +192,7 @@ export default function ArrivalScreen() {
                     key={index}
                     style={[
                       styles.photoIndicator,
-                      { backgroundColor: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.3)' },
+                      { backgroundColor: 'rgba(255,255,255,0.5)' },
                     ]}
                   />
                 ))}
@@ -202,23 +200,23 @@ export default function ArrivalScreen() {
             )}
           </Animated.View>
         ) : (
-          <Animated.View style={[styles.placeholderPhoto, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }, photoAnimatedStyle]}>
-            <Text style={[styles.placeholderEmoji, { color: isDark ? '#8E8E93' : '#6E6E73' }]}>
+          <Animated.View style={[styles.placeholderPhoto, { backgroundColor: '#2C2C2E' }, photoAnimatedStyle]}>
+            <Text style={[styles.placeholderEmoji, { color: '#8E8E93' }]}>
               📍
             </Text>
           </Animated.View>
         )}
         
-        <Animated.Text style={[styles.arrivalText, { color: isDark ? '#FFFFFF' : '#000000' }, arrivalAnimatedStyle]}>
+        <Animated.Text style={[styles.arrivalText, { color: '#FFFFFF' }, arrivalAnimatedStyle]}>
           You've Arrived!
         </Animated.Text>
 
         <View style={styles.placeInfo}>
-          <Animated.Text style={[styles.placeName, { color: isDark ? '#FFFFFF' : '#000000' }, placeNameAnimatedStyle]}>
+          <Animated.Text style={[styles.placeName, { color: '#FFFFFF' }, placeNameAnimatedStyle]}>
             {targetPlace.name}
           </Animated.Text>
           {targetPlace.address && (
-            <Animated.Text style={[styles.placeAddress, { color: isDark ? '#8E8E93' : '#6E6E73' }, placeNameAnimatedStyle]}>
+            <Animated.Text style={[styles.placeAddress, { color: '#8E8E93' }, placeNameAnimatedStyle]}>
               {targetPlace.address}
             </Animated.Text>
           )}
@@ -237,12 +235,12 @@ export default function ArrivalScreen() {
           style={[
             styles.button,
             {
-              backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+              backgroundColor: '#2C2C2E',
             },
           ]}
           onPress={handleChooseAnother}
         >
-          <Text style={[styles.buttonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
             Try Another Place
           </Text>
         </TouchableOpacity>
