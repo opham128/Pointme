@@ -15,6 +15,8 @@ interface AppContextType {
   refreshHistory: () => Promise<void>;
   hasPurchased: boolean;
   refreshPurchaseStatus: () => Promise<void>;
+  categoryPreferences: { restaurantCuisine?: string; barPriceLevel?: number } | null;
+  setCategoryPreferences: (prefs: { restaurantCuisine?: string; barPriceLevel?: number } | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -26,6 +28,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [arrivalHistory, setArrivalHistory] = useState<ArrivalHistoryItem[]>([]);
   const [arrivalCount, setArrivalCount] = useState<number>(0);
   const [hasPurchased, setHasPurchased] = useState<boolean>(false);
+  const [categoryPreferences, setCategoryPreferences] = useState<{ restaurantCuisine?: string; barPriceLevel?: number } | null>(null);
 
   const refreshHistory = async () => {
     const history = await getArrivalHistory();
@@ -60,6 +63,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         refreshHistory,
         hasPurchased,
         refreshPurchaseStatus,
+        categoryPreferences,
+        setCategoryPreferences,
       }}
     >
       {children}

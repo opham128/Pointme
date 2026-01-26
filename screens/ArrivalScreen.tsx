@@ -27,7 +27,7 @@ import Animated, {
 export default function ArrivalScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
-  const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory, arrivalCount, hasPurchased } = useAppContext();
+  const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory, arrivalCount, hasPurchased, setCategoryPreferences } = useAppContext();
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [hasSavedArrival, setHasSavedArrival] = useState(false);
   const [imagesReady, setImagesReady] = useState(false);
@@ -149,6 +149,7 @@ export default function ArrivalScreen() {
   const handleChooseAnother = () => {
     setSelectedCategory(null);
     setTargetPlace(null);
+    setCategoryPreferences(null);
     router.replace('/');
   };
 

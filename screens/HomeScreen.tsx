@@ -29,19 +29,25 @@ import { useLocation } from '../hooks/useLocation';
 import { clearAllStorage } from '../services/storage';
 import { togglePurchaseStatusDebug } from '../services/purchases';
 import { getDistancePreferences, saveDistancePreferences, DistancePreferences } from '../services/storage';
+import { RESTAURANT_CUISINES, BAR_PRICE_LEVELS } from '../constants';
 
 const ACCENT_COLOR = '#007AFF';
 
 export default function HomeScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
-  const { setSelectedCategory, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus } = useAppContext();
+  const { setSelectedCategory, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences } = useAppContext();
   const { location, loading, error, permissionGranted, requestPermission } = useLocation();
   
   // Distance filtering state (for paid users)
   const [distanceEnabled, setDistanceEnabled] = useState(false);
   const [minDistance, setMinDistance] = useState('');
   const [maxDistance, setMaxDistance] = useState('');
+  
+  // Category filtering state (for paid users) - reset each time, not saved
+  const [restaurantCuisine, setRestaurantCuisine] = useState<string | null>(null);
+  const [barPriceLevel, setBarPriceLevel] = useState<number | undefined>(undefined);
+  const [expandedCategory, setExpandedCategory] = useState<Category | null>(null);
   
   // Load distance preferences for paid users
   useEffect(() => {
@@ -94,6 +100,7 @@ export default function HomeScreen() {
       saveDistancePreferences(prefs);
     }
   }, [distanceEnabled, minDistance, maxDistance, hasPurchased]);
+
   
   // Animation values
   const titleOpacity = useSharedValue(0);
@@ -139,8 +146,47 @@ export default function HomeScreen() {
       return;
     }
 
+    // Set category preferences for this search (only if paid user and selections made)
+    if (hasPurchased) {
+      const prefs: { restaurantCuisine?: string; barPriceLevel?: number } = {};
+      if (category === 'restaurants' && restaurantCuisine !== null) {
+        prefs.restaurantCuisine = restaurantCuisine;
+      }
+      if (category === 'bars' && barPriceLevel !== undefined) {
+        prefs.barPriceLevel = barPriceLevel;
+      }
+      setCategoryPreferences(Object.keys(prefs).length > 0 ? prefs : null);
+    } else {
+      setCategoryPreferences(null);
+    }
+
+    setExpandedCategory(null); // Collapse after selection
     setSelectedCategory(category);
     router.push('/compass');
+  };
+
+  const handleCategoryPress = (category: Category) => {
+    if (!hasPurchased) {
+      // For non-paid users, just select the category
+      handleCategorySelect(category);
+      return;
+    }
+
+    // Only restaurants and bars have filters - others go directly
+    if (category !== 'restaurants' && category !== 'bars') {
+      handleCategorySelect(category);
+      return;
+    }
+
+    // For restaurants and bars, toggle expansion
+    if (expandedCategory === category) {
+      // If already expanded, collapse and proceed with selection
+      setExpandedCategory(null);
+      handleCategorySelect(category);
+    } else {
+      // Expand to show filter options
+      setExpandedCategory(category);
+    }
   };
 
   const handleInviteFriend = async () => {
@@ -286,11 +332,111 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {(Object.keys(CATEGORIES) as Category[]).map((category) => (
-          <CategoryButton
-            key={category}
-            category={category}
-            onPress={handleCategorySelect}
-          />
+          <View key={category}>
+            <CategoryButton
+              category={category}
+              onPress={hasPurchased ? () => handleCategoryPress(category) : handleCategorySelect}
+            />
+            
+            {/* Expandable filter options (Paid Users Only) */}
+            {hasPurchased && expandedCategory === category && (
+              <View style={[styles.expandedFilterContainer, { backgroundColor: '#1C1C1E' }]}>
+                {category === 'restaurants' && (
+                  <>
+                    <Text style={[styles.categoryFilterLabel, { color: '#FFFFFF' }]}>
+                      🍽️ Restaurant Type
+                    </Text>
+                    <View style={styles.cuisineButtonsContainer}>
+                      <TouchableOpacity
+                        style={[
+                          styles.cuisineButton,
+                          {
+                            backgroundColor: restaurantCuisine === null ? '#007AFF' : '#2C2C2E',
+                            borderColor: restaurantCuisine === null ? '#007AFF' : '#3A3A3C',
+                          },
+                        ]}
+                        onPress={() => setRestaurantCuisine(null)}
+                      >
+                        <Text style={[styles.cuisineButtonText, { color: restaurantCuisine === null ? '#FFFFFF' : '#8E8E93' }]}>
+                          All
+                        </Text>
+                      </TouchableOpacity>
+                      {RESTAURANT_CUISINES.map((cuisine) => (
+                        <TouchableOpacity
+                          key={cuisine.value}
+                          style={[
+                            styles.cuisineButton,
+                            {
+                              backgroundColor: restaurantCuisine === cuisine.value ? '#007AFF' : '#2C2C2E',
+                              borderColor: restaurantCuisine === cuisine.value ? '#007AFF' : '#3A3A3C',
+                            },
+                          ]}
+                          onPress={() => setRestaurantCuisine(cuisine.value)}
+                        >
+                          <Text style={[styles.cuisineButtonText, { color: restaurantCuisine === cuisine.value ? '#FFFFFF' : '#8E8E93' }]}>
+                            {cuisine.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.searchButton, { backgroundColor: '#007AFF' }]}
+                      onPress={() => handleCategorySelect('restaurants')}
+                    >
+                      <Text style={styles.searchButtonText}>Search</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                
+                {category === 'bars' && (
+                  <>
+                    <Text style={[styles.categoryFilterLabel, { color: '#FFFFFF' }]}>
+                      🍺 Bar Price Range
+                    </Text>
+                    <View style={styles.priceButtonsContainer}>
+                      <TouchableOpacity
+                        style={[
+                          styles.priceButton,
+                          {
+                            backgroundColor: barPriceLevel === undefined ? '#007AFF' : '#2C2C2E',
+                            borderColor: barPriceLevel === undefined ? '#007AFF' : '#3A3A3C',
+                          },
+                        ]}
+                        onPress={() => setBarPriceLevel(undefined)}
+                      >
+                        <Text style={[styles.priceButtonText, { color: barPriceLevel === undefined ? '#FFFFFF' : '#8E8E93' }]}>
+                          Any
+                        </Text>
+                      </TouchableOpacity>
+                      {BAR_PRICE_LEVELS.map((price) => (
+                        <TouchableOpacity
+                          key={price.value}
+                          style={[
+                            styles.priceButton,
+                            {
+                              backgroundColor: barPriceLevel === price.value ? '#007AFF' : '#2C2C2E',
+                              borderColor: barPriceLevel === price.value ? '#007AFF' : '#3A3A3C',
+                            },
+                          ]}
+                          onPress={() => setBarPriceLevel(price.value)}
+                        >
+                          <Text style={[styles.priceButtonText, { color: barPriceLevel === price.value ? '#FFFFFF' : '#8E8E93' }]}>
+                            {price.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.searchButton, { backgroundColor: '#007AFF' }]}
+                      onPress={() => handleCategorySelect('bars')}
+                    >
+                      <Text style={styles.searchButtonText}>Search</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            )}
+          </View>
         ))}
         
         {/* Distance Filter (Paid Users Only) */}
@@ -500,6 +646,69 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginTop: 20,
+  },
+  expandedFilterContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  categoryFilterContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  categoryFilterLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  cuisineButtonsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  cuisineButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  cuisineButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  priceButtonsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  priceButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  priceButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  searchButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  searchButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,

@@ -16,6 +16,7 @@ interface CachedPlaceResult {
   location: Location; // Rounded location used for cache key
   category: Category;
   distancePreferences?: { minDistanceMiles?: number; maxDistanceMiles?: number; enabled: boolean };
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number };
 }
 
 export interface ArrivalHistoryItem {
@@ -165,14 +166,22 @@ function roundLocationForCache(location: Location): Location {
 }
 
 /**
- * Generate cache key from category and rounded location
+ * Generate cache key from category, rounded location, distance preferences, and category preferences
  */
-function getCacheKey(category: Category, location: Location, distancePreferences?: DistancePreferences): string {
+function getCacheKey(
+  category: Category, 
+  location: Location, 
+  distancePreferences?: DistancePreferences,
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
+): string {
   const rounded = roundLocationForCache(location);
   const prefsKey = distancePreferences?.enabled 
     ? `${distancePreferences.minDistanceMiles || 0}-${distancePreferences.maxDistanceMiles || 0}`
     : 'none';
-  return `${category}-${rounded.latitude.toFixed(3)}-${rounded.longitude.toFixed(3)}-${prefsKey}`;
+  const categoryPrefsKey = categoryPreferences 
+    ? `${categoryPreferences.restaurantCuisine || 'none'}-${categoryPreferences.barPriceLevel ?? 'none'}`
+    : 'none';
+  return `${category}-${rounded.latitude.toFixed(3)}-${rounded.longitude.toFixed(3)}-${prefsKey}-${categoryPrefsKey}`;
 }
 
 /**
@@ -181,14 +190,15 @@ function getCacheKey(category: Category, location: Location, distancePreferences
 export async function getCachedPlace(
   category: Category,
   location: Location,
-  distancePreferences?: DistancePreferences
+  distancePreferences?: DistancePreferences,
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
 ): Promise<Place | null | undefined> {
   try {
     const cacheData = await AsyncStorage.getItem(PLACE_CACHE_KEY);
     if (!cacheData) return undefined;
 
     const cache: Record<string, CachedPlaceResult> = JSON.parse(cacheData);
-    const cacheKey = getCacheKey(category, location, distancePreferences);
+    const cacheKey = getCacheKey(category, location, distancePreferences, categoryPreferences);
     const cached = cache[cacheKey];
 
     if (!cached) return undefined;
@@ -216,7 +226,8 @@ export async function cachePlace(
   category: Category,
   location: Location,
   place: Place | null,
-  distancePreferences?: DistancePreferences
+  distancePreferences?: DistancePreferences,
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
 ): Promise<void> {
   try {
     const cacheData = await AsyncStorage.getItem(PLACE_CACHE_KEY);
@@ -238,13 +249,14 @@ export async function cachePlace(
       sorted.slice(0, 10).forEach(([key]) => delete cache[key]);
     }
 
-    const cacheKey = getCacheKey(category, location, distancePreferences);
+    const cacheKey = getCacheKey(category, location, distancePreferences, categoryPreferences);
     cache[cacheKey] = {
       place,
       cachedAt: Date.now(),
       location: roundLocationForCache(location),
       category,
       distancePreferences,
+      categoryPreferences,
     };
 
     await AsyncStorage.setItem(PLACE_CACHE_KEY, JSON.stringify(cache));

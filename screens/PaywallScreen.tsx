@@ -123,14 +123,14 @@ export default function PaywallScreen() {
           </Text>
         </TouchableOpacity>
 
-        <Text style={[styles.emoji, { color: '#FFFFFF' }]}>✨</Text>
+        <Text style={[styles.emoji, { color: '#FFFFFF' }]}>🧭</Text>
 
         <Text style={[styles.title, { color: '#FFFFFF' }]}>
-          Unlock Lifetime Access
+        Unlock Your Next Adventure
         </Text>
 
         <Text style={[styles.subtitle, { color: '#8E8E93' }]}>
-          You've reached your free limit of {arrivalCount} locations
+          You've reached your free limit of 5 locations
         </Text>
 
         <Text style={[styles.beerText, { color: '#FFFFFF' }]}>
@@ -139,32 +139,32 @@ export default function PaywallScreen() {
 
         <View style={[styles.featuresContainer, { backgroundColor: '#1C1C1E' }]}>
           <View style={styles.feature}>
-            <View style={[styles.featureIcon, { backgroundColor: '#2C2C2E' }]}>
-              <Text style={[styles.featureIconText, { color: '#FFFFFF' }]}>∞</Text>
+            <View style={[styles.featureIcon, { backgroundColor: 'rgba(0, 122, 255, 0.2)' }]}>
+              <Text style={[styles.featureIconText, { color: '#007AFF' }]}>∞</Text>
             </View>
             <Text style={[styles.featureText, { color: '#FFFFFF' }]}>
               Unlimited searches and fun plans
             </Text>
           </View>
           <View style={styles.feature}>
-            <View style={[styles.featureIcon, { backgroundColor: '#2C2C2E' }]}>
-              <Text style={[styles.featureIconText, { color: '#FFFFFF' }]}>★</Text>
+            <View style={[styles.featureIcon, { backgroundColor: 'rgba(255, 204, 0, 0.2)' }]}>
+              <Text style={[styles.featureIconText, { color: '#FFCC00' }]}>★</Text>
             </View>
             <Text style={[styles.featureText, { color: '#FFFFFF' }]}>
             Bars, dates, food all in one
             </Text>
           </View>
           <View style={styles.feature}>
-            <View style={[styles.featureIcon, { backgroundColor: '#2C2C2E' }]}>
-              <Text style={[styles.featureIconText, { color: '#FFFFFF' }]}>⇄</Text>
+            <View style={[styles.featureIcon, { backgroundColor: 'rgba(52, 199, 89, 0.2)' }]}>
+              <Text style={[styles.featureIconText, { color: '#34C759' }]}>⇄</Text>
             </View>
             <Text style={[styles.featureText, { color: '#FFFFFF' }]}>
               Control the walk with distance filters
             </Text>
           </View>
           <View style={styles.feature}>
-            <View style={[styles.featureIcon, { backgroundColor: '#2C2C2E' }]}>
-              <Text style={[styles.featureIconText, { color: '#FFFFFF' }]}>◆</Text>
+            <View style={[styles.featureIcon, { backgroundColor: 'rgba(175, 82, 222, 0.2)' }]}>
+              <Text style={[styles.featureIconText, { color: '#AF52DE' }]}>◆</Text>
             </View>
             <Text style={[styles.featureText, { color: '#FFFFFF' }]}>
               Pick the cuisine & price
@@ -195,7 +195,7 @@ export default function PaywallScreen() {
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text style={styles.purchaseButtonText}>
-                Unlock Your Next Adventure for ${PURCHASE_PRICE.toFixed(2)}
+                Lifetime Access for ${PURCHASE_PRICE.toFixed(2)}
               </Text>
             )}
           </TouchableOpacity>
@@ -219,9 +219,9 @@ export default function PaywallScreen() {
           )}
         </TouchableOpacity>
 
-        <Text style={[styles.footerText, { color: '#8E8E93' }]}>
+        {/* <Text style={[styles.footerText, { color: '#8E8E93' }]}>
           Payment will be charged to your {Platform.OS === 'ios' ? 'Apple' : 'Google'} account
-        </Text>
+        </Text> */}
       </Animated.View>
     </View>
   );
@@ -252,6 +252,7 @@ const styles = StyleSheet.create({
   closeButtonText: {
     fontSize: 24,
     fontWeight: '300',
+    opacity: 0.6,
   },
   emoji: {
     fontSize: 64,
@@ -274,6 +275,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+    marginTop: 8,
     marginBottom: 32,
     paddingHorizontal: 20,
     fontStyle: 'italic',
@@ -281,7 +283,7 @@ const styles = StyleSheet.create({
   featuresContainer: {
     width: '100%',
     borderRadius: 16,
-    padding: 20,
+    padding: 10,
     marginBottom: 60,
   },
   feature: {
@@ -368,7 +370,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 5,
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 0,
   },
   restoreButtonTextOnlyText: {
     fontSize: 14,
@@ -384,11 +386,11 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
-  footerText: {
-    fontSize: 11,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-    lineHeight: 14,
-  },
+  // footerText: {
+  //   fontSize: 11,
+  //   textAlign: 'center',
+  //   paddingHorizontal: 20,
+  //   lineHeight: 14,
+  // },
 });
 

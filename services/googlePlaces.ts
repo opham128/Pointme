@@ -1,5 +1,5 @@
 import { Location, Place } from '../types';
-import { CATEGORIES, Category } from '../constants';
+import { CATEGORIES, Category, MIN_INITIAL_DISTANCE } from '../constants';
 import { GOOGLE_PLACES_API_KEY as ENV_API_KEY } from '@env';
 import { getRecentPlaceIds } from './storage';
 
@@ -37,7 +37,8 @@ async function searchWithRadius(
   userLocation: Location,
   radius: number,
   category: Category,
-  categoryInfo: any
+  categoryInfo: any,
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
 ): Promise<any[]> {
   const placeIdMap = new Map<string, any>();
   
@@ -50,10 +51,16 @@ async function searchWithRadius(
         'things to do',
         'fun activities',
         'tourist attractions',
-        'points of interest'
+        'Things to see near me'
       ];
       const randomQuery = randomQueries[Math.floor(Math.random() * randomQueries.length)];
       const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(randomQuery)}&location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&key=${GOOGLE_PLACES_API_KEY}`;
+      response = await fetch(textSearchUrl);
+    } else if (category === 'restaurants' && categoryPreferences?.restaurantCuisine) {
+      // Use Text Search for specific cuisine type
+      const cuisineType = categoryPreferences.restaurantCuisine;
+      const query = `${cuisineType} restaurant`;
+      const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&key=${GOOGLE_PLACES_API_KEY}`;
       response = await fetch(textSearchUrl);
     } else {
       // Use Nearby Search for all categories (including bars)
@@ -100,7 +107,8 @@ async function searchWithRadius(
 export async function findNearestPlace(
   userLocation: Location,
   category: Category,
-  distancePreferences?: { minDistanceMiles?: number; maxDistanceMiles?: number; enabled: boolean }
+  distancePreferences?: { minDistanceMiles?: number; maxDistanceMiles?: number; enabled: boolean },
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
 ): Promise<Place | null> {
   if (!GOOGLE_PLACES_API_KEY) {
     throw new Error('Google Places API key is not configured. Please set GOOGLE_PLACES_API_KEY in your .env file.');
@@ -148,7 +156,7 @@ export async function findNearestPlace(
     // Search with progressive radii
     for (const radius of searchRadiiToUse) {
       console.log(`Searching with radius: ${radius}m`);
-      const results = await searchWithRadius(userLocation, radius, category, categoryInfo);
+      const results = await searchWithRadius(userLocation, radius, category, categoryInfo, categoryPreferences);
       
       let newResults = 0;
       results.forEach((place: any) => {
@@ -194,7 +202,7 @@ export async function findNearestPlace(
         rawPlace?: any;
       }
       
-      // Filter out recent places and calculate distances
+      // Filter out recent places, places too close, and calculate distances
       const placesWithDistance: PlaceWithDistance[] = data.results
         .filter((place: any) => {
           // Exclude places that are in recent history
@@ -219,6 +227,14 @@ export async function findNearestPlace(
           placeId: place.place_id,
           rawPlace: place, // Keep original for debugging
         };
+      })
+      .filter((place: PlaceWithDistance) => {
+        // Filter out places that are too close (prevent immediate arrival trigger)
+        if (place.distance < MIN_INITIAL_DISTANCE) {
+          console.log(`Excluding place too close: ${place.name} - ${Math.round(place.distance)}ft (minimum: ${MIN_INITIAL_DISTANCE}ft)`);
+          return false;
+        }
+        return true;
       });
 
       // For non-distance queries: If all results were filtered out, search larger radius
@@ -229,7 +245,7 @@ export async function findNearestPlace(
         const largerRadii = [20000, 30000]; // 20km, 30km
         for (const largerRadius of largerRadii) {
           console.log(`Searching with larger radius: ${largerRadius}m`);
-          const additionalResults = await searchWithRadius(userLocation, largerRadius, category, categoryInfo);
+          const additionalResults = await searchWithRadius(userLocation, largerRadius, category, categoryInfo, categoryPreferences);
           
           // Process only NEW results (not already in allResultsMap)
           const newPlacesWithDistance: PlaceWithDistance[] = additionalResults
@@ -262,6 +278,14 @@ export async function findNearestPlace(
                 placeId: place.place_id,
                 rawPlace: place,
               };
+            })
+            .filter((place: PlaceWithDistance) => {
+              // Filter out places that are too close (prevent immediate arrival trigger)
+              if (place.distance < MIN_INITIAL_DISTANCE) {
+                console.log(`Excluding place too close: ${place.name} - ${Math.round(place.distance)}ft (minimum: ${MIN_INITIAL_DISTANCE}ft)`);
+                return false;
+              }
+              return true;
             });
           
           if (newPlacesWithDistance.length > 0) {
@@ -301,6 +325,26 @@ export async function findNearestPlace(
         });
         
         console.log(`Distance filtering: ${placesWithDistance.length} places → ${filteredPlaces.length} places in range`);
+      }
+
+      // Apply bar price level filtering for paid users if enabled
+      if (category === 'bars' && categoryPreferences?.barPriceLevel !== undefined) {
+        const targetPriceLevel = categoryPreferences.barPriceLevel;
+        filteredPlaces = filteredPlaces.filter(place => {
+          // Google Places API returns price_level: 0, 1, 2, 3, or undefined
+          const placePriceLevel = place.rawPlace?.price_level;
+          if (placePriceLevel === undefined) {
+            // If price level is not available, include it (to avoid filtering out too many results)
+            return true;
+          }
+          const matches = placePriceLevel === targetPriceLevel;
+          if (!matches) {
+            console.log(`Filtered out ${place.name} - price level ${placePriceLevel} doesn't match ${targetPriceLevel}`);
+          }
+          return matches;
+        });
+        
+        console.log(`Price level filtering: ${placesWithDistance.length} places → ${filteredPlaces.length} places with price level ${targetPriceLevel}`);
       }
 
       // Check if all results were filtered out by distance preferences
