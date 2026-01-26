@@ -60,9 +60,9 @@ export function CompassNeedle({ rotation, pulseScale, pulseOpacity }: CompassNee
     // Normalize the rotation to take the shortest path
     const normalizedTarget = normalizeAngle(rotationValue.value, rotation);
     
-    // Use withTiming with smooth easing instead of spring for Apple-like smoothness
+    // Use withTiming with smooth easing - optimized for triangle rendering
     rotationValue.value = withTiming(normalizedTarget, {
-      duration: 200, // Smooth, responsive animation
+      duration: 200, // Faster response for smoother feel with triangles
       easing: Easing.out(Easing.cubic), // Smooth easing curve similar to Apple's
     });
   }, [rotation]);
@@ -97,19 +97,62 @@ export function CompassNeedle({ rotation, pulseScale, pulseOpacity }: CompassNee
         {/* Pulsing glow ring (when close) */}
         <Animated.View style={[styles.glowRing, pulseAnimatedStyle]} />
         
-        {/* Outer glow ring (static) */}
-        <View style={styles.glowRingStatic} />
-        
         {/* North indicator */}
         <View style={[styles.northIndicator, { backgroundColor: '#FF3B30' }]} />
+        
+        {/* Compass tick marks - major ticks every 45 degrees */}
+        {Array.from({ length: 8 }).map((_, i) => {
+          const angle = i * 45; // 360 / 8
+          // Skip the tick at 0 degrees (same position as north indicator)
+          if (angle === 0) return null;
+          return (
+            <View
+              key={`major-tick-${i}`}
+              style={[
+                styles.tickMark,
+                styles.majorTick,
+                {
+                  transform: [
+                    { rotateZ: `${angle}deg` },
+                    { translateY: -135 }, // distance from center (radius - padding)
+                  ],
+                },
+              ]}
+            />
+          );
+        })}
+        
+        {/* Compass tick marks - minor ticks every 9 degrees */}
+        {Array.from({ length: 40 }).map((_, i) => {
+          const angle = i * 9; // Every 9 degrees
+          // Skip ticks at major positions (multiples of 45) and at 0 degrees (north indicator)
+          if (angle % 45 === 0 || angle === 0) return null;
+          return (
+            <View
+              key={`minor-tick-${i}`}
+              style={[
+                styles.tickMark,
+                styles.minorTick,
+                {
+                  transform: [
+                    { rotateZ: `${angle}deg` },
+                    { translateY: -135 }, // distance from center (radius - padding)
+                  ],
+                },
+              ]}
+            />
+          );
+        })}
         
         {/* Center dot */}
         <View style={styles.centerDot} />
         
-        {/* Compass needle with enhanced design */}
+        {/* Compass needle with enhanced design - isosceles triangle shape */}
         <Animated.View style={[styles.needleContainer, animatedStyle]}>
-          <View style={[styles.needle, { backgroundColor: '#FF3B30' }]} />
-          <View style={[styles.needleTail, { backgroundColor: '#8E8E93' }]} />
+          {/* Top triangle (red) */}
+          <View style={styles.needleTopTriangle} />
+          {/* Bottom triangle (gray) */}
+          <View style={styles.needleBottomTriangle} />
         </Animated.View>
       </View>
     </View>
@@ -142,26 +185,33 @@ const styles = StyleSheet.create({
   },
   glowRing: {
     position: 'absolute',
-    width: 340,
-    height: 340,
-    borderRadius: 170,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 59, 48, 0.6)',
-  },
-  glowRingStatic: {
-    position: 'absolute',
     width: 320,
     height: 320,
     borderRadius: 160,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 59, 48, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 59, 48, 0.6)',
   },
   northIndicator: {
     position: 'absolute',
-    top: 10,
+    top: 6,
     width: 4,
     height: 20,
     borderRadius: 2,
+  },
+  tickMark: {
+    position: 'absolute',
+    borderRadius: 2,
+    backgroundColor: '#8E8E93', // subtle gray
+  },
+  majorTick: {
+    width: 1,
+    height: 18,
+    opacity: 0.6,
+  },
+  minorTick: {
+    width: 1,
+    height: 10,
+    opacity: 0.4,
   },
   centerDot: {
     width: 12,
@@ -188,14 +238,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 5,
   },
-  needle: {
-    width: 5,
-    height: 100,
-    borderRadius: 2.5,
+  needleTopTriangle: {
     position: 'absolute',
     top: '50%',
     marginTop: -100,
-    backgroundColor: '#FF3B30',
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 100,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#FF3B30',
     shadowColor: '#FF3B30',
     shadowOffset: {
       width: 0,
@@ -205,14 +259,18 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  needleTail: {
-    width: 4,
-    height: 100,
-    borderRadius: 2,
+  needleBottomTriangle: {
     position: 'absolute',
     bottom: '50%',
     marginBottom: -100,
-    backgroundColor: '#8E8E93',
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 100,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#8E8E93',
     opacity: 0.7,
     shadowColor: '#8E8E93',
     shadowOffset: {
