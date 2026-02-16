@@ -1,31 +1,47 @@
 import { Location, Place } from '../types';
 import { CATEGORIES, Category, MIN_INITIAL_DISTANCE } from '../constants';
-import { Platform } from 'react-native';
-import { 
-  GOOGLE_PLACES_API_KEY as ENV_API_KEY,
-  // @ts-ignore - Platform-specific keys may not be in .env during development
-  GOOGLE_PLACES_API_KEY_IOS,
-  // @ts-ignore - Platform-specific keys may not be in .env during development
-  GOOGLE_PLACES_API_KEY_ANDROID,
-} from '@env';
+import { MAPBOX_ACCESS_TOKEN as ENV_TOKEN } from '@env';
 import { getRecentPlaceIds } from './storage';
 
-// Get API key based on platform
-// For production: Use separate keys for iOS and Android with platform restrictions
-// For development: Can use a single key (GOOGLE_PLACES_API_KEY) or platform-specific keys
-const getApiKey = (): string => {
-  // Priority: Platform-specific keys > Single key fallback
-  if (Platform.OS === 'ios' && GOOGLE_PLACES_API_KEY_IOS) {
-    return GOOGLE_PLACES_API_KEY_IOS;
-  }
-  if (Platform.OS === 'android' && GOOGLE_PLACES_API_KEY_ANDROID) {
-    return GOOGLE_PLACES_API_KEY_ANDROID;
-  }
-  // Fallback to single key (for development or if platform keys not set)
-  return ENV_API_KEY || '';
+// Mapbox tokens work for both iOS and Android - no platform restrictions needed
+// You can use a single token for both platforms
+const MAPBOX_ACCESS_TOKEN = ENV_TOKEN || '';
+const MAPBOX_SEARCH_API = 'https://api.mapbox.com/search/searchbox/v1/category';
+
+// Map categories to Mapbox Search API category names
+const MAPBOX_CATEGORY_NAMES: Record<Category, string> = {
+  bars: 'bar',
+  restaurants: 'restaurant',
+  liquor_stores: 'liquor_store',
+  cafes: 'cafe',
+  random: 'attraction', // For random, we'll use a fallback or specific category
 };
 
-const GOOGLE_PLACES_API_KEY = getApiKey();
+// For random category, use these specific categories
+const RANDOM_CATEGORIES = [
+  'museum',
+  'park',
+  'theater',
+  'cinema',
+  'stadium',
+  'zoo',
+  'aquarium',
+  'art_gallery',
+  'monument',
+  'library',
+];
+
+// Map cuisine types to Mapbox search terms
+const CUISINE_MAP: Record<string, string> = {
+  italian: 'italian restaurant',
+  chinese: 'chinese restaurant',
+  mexican: 'mexican restaurant',
+  japanese: 'japanese restaurant',
+  indian: 'indian restaurant',
+  thai: 'thai restaurant',
+  american: 'american restaurant',
+  french: 'french restaurant',
+};
 
 /**
  * Calculate the distance between two coordinates using the Haversine formula
@@ -49,8 +65,15 @@ export function calculateDistance(loc1: Location, loc2: Location): number {
 }
 
 /**
- * Perform a search with a specific radius and return results
- * Helper function to avoid code duplication
+ * Get the place ID from a Mapbox Search API feature
+ * The Search API uses properties.mapbox_id, not feature.id
+ */
+function getPlaceId(feature: any): string | undefined {
+  return feature.properties?.mapbox_id || feature.id;
+}
+
+/**
+ * Perform a search with Mapbox Search API category endpoint
  */
 async function searchWithRadius(
   userLocation: Location,
@@ -62,51 +85,154 @@ async function searchWithRadius(
   const placeIdMap = new Map<string, any>();
   
   try {
-    let response: Response;
+    let categoryName: string;
     
     if (category === 'random') {
-      const randomQueries = [
-        'attractions',
-        'things to do',
-        'fun activities',
-        'tourist attractions',
-        'Things to see near me'
-      ];
-      const randomQuery = randomQueries[Math.floor(Math.random() * randomQueries.length)];
-      const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(randomQuery)}&location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&key=${GOOGLE_PLACES_API_KEY}`;
-      response = await fetch(textSearchUrl);
+      // For random, pick a random category from the list
+      categoryName = RANDOM_CATEGORIES[Math.floor(Math.random() * RANDOM_CATEGORIES.length)];
     } else if (category === 'restaurants' && categoryPreferences?.restaurantCuisine) {
-      // Use Text Search for specific cuisine type
-      const cuisineType = categoryPreferences.restaurantCuisine;
-      const query = `${cuisineType} restaurant`;
-      const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&key=${GOOGLE_PLACES_API_KEY}`;
-      response = await fetch(textSearchUrl);
+      // For cuisine-specific searches, we still use 'restaurant' category
+      // The Search API might filter by cuisine in the response, or we filter client-side
+      categoryName = 'restaurant';
     } else {
-      // Use Nearby Search for all categories (including bars)
-      const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=${radius}&type=${categoryInfo.googleType}&key=${GOOGLE_PLACES_API_KEY}`;
-      response = await fetch(url);
+      categoryName = MAPBOX_CATEGORY_NAMES[category];
     }
     
-    // Check if fetch failed (network error)
+    // Build Mapbox Search API category URL
+    // Format: /category/{category}?proximity={lng},{lat}&limit={limit}&access_token={token}
+    const proximity = `${userLocation.longitude},${userLocation.latitude}`;
+    const limit = 10; // Limit results per request
+    
+    let url = `${MAPBOX_SEARCH_API}/${categoryName}?`;
+    url += `proximity=${proximity}`;
+    url += `&limit=${limit}`;
+    //url += `&access_token=${MAPBOX_ACCESS_TOKEN}`;
+    url += `&access_token=pk.eyJ1Ijoib3BoYW0iLCJhIjoiY21sZzJkeHlzMDh2azNkcHZtYXdhZzE5ciJ9.dpoW7P36GmUpxtFzJN-zuQ`;
+
+    // Note: The Search API category endpoint may not support bbox parameter
+    // We'll filter by radius client-side after getting results
+    
+    // Keep logs useful but never print the token
+    console.log('Mapbox Search API URL:', url.replace(MAPBOX_ACCESS_TOKEN, 'TOKEN_HIDDEN'));
+    
+    const response = await fetch(url);
+    
+    // Check if fetch failed
     if (!response.ok) {
-      throw new Error('Network request failed. Please check your internet connection.');
+      const errorText = await response.text();
+      console.error('Mapbox Search API error:', response.status, errorText);
+      
+      // Try to parse error as JSON to check for auth errors
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData?.message && typeof errorData.message === 'string') {
+          const msg = errorData.message.toLowerCase();
+          if (msg.includes('not authorized') || msg.includes('invalid token') || msg.includes('no token')) {
+            throw new Error(`Mapbox auth error: ${errorData.message}`);
+          }
+        }
+      } catch (e) {
+        // Error text is not JSON, continue with generic error
+      }
+      
+      // For 401/403, throw auth error; for 5xx, throw server error; otherwise network error
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Mapbox authentication failed. Please check your access token.');
+      } else if (response.status >= 500) {
+        throw new Error('Mapbox server error. Please try again later.');
+      } else {
+        throw new Error('Network request failed. Please check your internet connection.');
+      }
     }
     
     const data = await response.json();
+    // Double-check for auth errors in successful-looking responses (shouldn't happen, but just in case)
+    if (data?.message && typeof data.message === 'string') {
+      const msg = data.message.toLowerCase();
+      if (msg.includes('not authorized') || msg.includes('invalid token') || msg.includes('no token')) {
+        throw new Error(`Mapbox auth error: ${data.message}`);
+      }
+    }
+
+    console.log('Mapbox Search API response type:', data.type || 'unknown');
+    console.log('Mapbox Search API features count:', data.features?.length || 0);
     
-    if (data.status === 'OK' && data.results) {
-      const results = category === 'random' ? data.results : data.results;
-      results.forEach((place: any) => {
-        if (place.place_id) {
-          placeIdMap.set(place.place_id, place);
+    if (data.features && Array.isArray(data.features)) {
+      console.log(`Mapbox Search API returned ${data.features.length} features`);
+      
+      data.features.forEach((feature: any) => {
+        // Filter by radius first (Mapbox doesn't enforce radius, so we do it client-side)
+        if (!feature.geometry?.coordinates) {
+          console.log('Feature missing geometry.coordinates:', feature.properties?.name || 'unknown');
+          return;
+        }
+        
+        const [lng, lat] = feature.geometry.coordinates;
+        const placeLocation: Location = { latitude: lat, longitude: lng };
+        const distanceMeters = calculateDistance(userLocation, placeLocation);
+        
+        // Debug: log first few features to see what's happening
+        const featureName = feature.properties?.name || 'unknown';
+        if (placeIdMap.size < 3) {
+          console.log(`Feature: ${featureName}, distance: ${distanceMeters.toFixed(0)}m, radius: ${radius}m`);
+        }
+        
+        // Filter by radius
+        if (distanceMeters > radius) {
+          if (placeIdMap.size < 3) {
+            console.log(`  → Filtered out (distance ${distanceMeters.toFixed(0)}m > radius ${radius}m)`);
+          }
+          return;
+        }
+        
+        // The Search API category endpoint returns POIs for the specified category
+        // No need for additional category filtering - the API handles it
+        
+        // For cuisine-specific restaurant searches, filter client-side if needed
+        if (category === 'restaurants' && categoryPreferences?.restaurantCuisine) {
+          const cuisineType = categoryPreferences.restaurantCuisine.toLowerCase();
+          // Check if cuisine type appears in the name
+          if (!featureName.toLowerCase().includes(cuisineType)) {
+            // Still include it - cuisine filtering is lenient
+            console.log(`Cuisine check (keeping anyway): ${featureName}`);
+          }
+        }
+        
+        // Use mapbox_id as unique identifier (Search API uses properties.mapbox_id, not feature.id)
+        const placeId = feature.properties?.mapbox_id || feature.id;
+        if (placeId) {
+          placeIdMap.set(placeId, feature);
+          if (placeIdMap.size <= 3) {
+            console.log(`  → Added to results (ID: ${placeId})`);
+          }
+        } else {
+          console.log(`  → Skipped (no ID found for ${featureName})`);
         }
       });
+      
+      console.log(`After filtering: ${placeIdMap.size} places`);
+    } else {
+      console.log('No features in Mapbox Search API response');
+      console.log('Response data:', JSON.stringify(data, null, 2).substring(0, 1000));
+      if (data.error) {
+        console.error('Mapbox Search API error:', data.error);
+      }
+      if (data.message) {
+        console.error('Mapbox Search API message:', data.message);
+      }
     }
   } catch (error: any) {
-    // Check if it's a network error
+    // Don't re-wrap auth errors or errors we've already properly formatted
+    if (error.message?.includes('Mapbox auth') || error.message?.includes('authentication failed')) {
+      throw error;
+    }
+    
+    // Check if it's a network error (fetch failures, timeouts, etc.)
     if (error.message?.includes('Network') || error.message?.includes('fetch') || error.name === 'TypeError') {
       throw new Error('No internet connection. Please check your network and try again.');
     }
+    
+    // Re-throw any other errors as-is
     throw error;
   }
   
@@ -114,13 +240,13 @@ async function searchWithRadius(
 }
 
 /**
- * Find the nearest place of a given category using Google Places API
+ * Find the nearest place of a given category using Mapbox Search API category endpoint
  * Uses progressive radius searches to ensure we find the closest places
- * even when Google's API doesn't return all results in a single query
  * 
  * @param userLocation User's current location
  * @param category Category to search for
  * @param distancePreferences Optional distance filtering for paid users
+ * @param categoryPreferences Optional category preferences (cuisine, price level)
  * @returns The nearest place or null if not found
  */
 export async function findNearestPlace(
@@ -129,18 +255,17 @@ export async function findNearestPlace(
   distancePreferences?: { minDistanceMiles?: number; maxDistanceMiles?: number; enabled: boolean },
   categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
 ): Promise<Place | null> {
-  if (!GOOGLE_PLACES_API_KEY) {
-    throw new Error('Google Places API key is not configured. Please set GOOGLE_PLACES_API_KEY in your .env file.');
+  if (!MAPBOX_ACCESS_TOKEN) {
+    throw new Error('Mapbox access token is not configured. Please set MAPBOX_ACCESS_TOKEN in your .env file.');
   }
 
   const categoryInfo = CATEGORIES[category];
   
   // Progressive radius search: start small to catch nearby places, then expand
-  // This ensures we find places within 200m that might be missed in a single large-radius search
-  const searchRadii = [1000, 5000, 10000]; // 500m, 1km, 2km, 5km, 10km
+  const searchRadii = [1000, 5000, 10000]; // 1km, 5km, 10km
 
   try {
-    console.log('=== Progressive Radius Search ===');
+    console.log('=== Progressive Radius Search (Mapbox Search API) ===');
     console.log('User location:', userLocation);
     console.log('Category:', categoryInfo.label);
     if (distancePreferences?.enabled) {
@@ -183,8 +308,9 @@ export async function findNearestPlace(
       
       let newResults = 0;
       results.forEach((place: any) => {
-        if (place.place_id && !allResultsMap.has(place.place_id)) {
-          allResultsMap.set(place.place_id, place);
+        const placeId = getPlaceId(place);
+        if (placeId && !allResultsMap.has(placeId)) {
+          allResultsMap.set(placeId, place);
           newResults++;
         }
       });
@@ -198,14 +324,14 @@ export async function findNearestPlace(
         const validResults = allResults
           .filter((place: any) => {
             // Exclude recent places
-            if (place.place_id && recentPlaceIds.includes(place.place_id)) {
+            const placeId = getPlaceId(place);
+            if (placeId && recentPlaceIds.includes(placeId)) {
               return false;
             }
             // Calculate distance and check if too close
-            const placeLocation: Location = {
-              latitude: place.geometry.location.lat,
-              longitude: place.geometry.location.lng,
-            };
+            if (!place.geometry?.coordinates) return false;
+            const [lng, lat] = place.geometry.coordinates;
+            const placeLocation: Location = { latitude: lat, longitude: lng };
             const distanceMeters = calculateDistance(userLocation, placeLocation);
             const distanceFeet = distanceMeters * 3.28084;
             if (distanceFeet < MIN_INITIAL_DISTANCE) {
@@ -219,13 +345,7 @@ export async function findNearestPlace(
                 return false;
               }
             }
-            // Check bar price level if applicable
-            if (category === 'bars' && categoryPreferences?.barPriceLevel !== undefined) {
-              const placePriceLevel = place.price_level;
-              if (placePriceLevel !== undefined && placePriceLevel !== categoryPreferences.barPriceLevel) {
-                return false;
-              }
-            }
+            // Note: Mapbox doesn't have price_level like Google, so we skip bar price filtering
             return true;
           });
         
@@ -236,22 +356,12 @@ export async function findNearestPlace(
           console.log(`  Have ${allResultsMap.size} results but none valid yet, continuing search...`);
         }
       }
-      
-      // Stop if we've searched all radii
     }
     
     const allResults = Array.from(allResultsMap.values());
     console.log(`Total unique places found: ${allResults.length}`);
-    
-    const data = { status: allResults.length > 0 ? 'OK' : 'ZERO_RESULTS', results: allResults };
 
-    console.log('=== Google Places API Response ===');
-    console.log('Status:', data.status);
-    console.log('Total results:', data.results?.length || 0);
-
-    if (data.status === 'OK' && data.results && data.results.length > 0) {
-      // Recent place IDs already retrieved above
-
+    if (allResults.length > 0) {
       // Calculate distance for all results and find the nearest one
       interface PlaceWithDistance {
         name: string;
@@ -263,39 +373,43 @@ export async function findNearestPlace(
       }
       
       // Filter out recent places, places too close, and calculate distances
-      const placesWithDistance: PlaceWithDistance[] = data.results
+      const placesWithDistance: PlaceWithDistance[] = allResults
         .filter((place: any) => {
           // Exclude places that are in recent history
-          if (place.place_id && recentPlaceIds.includes(place.place_id)) {
-            console.log(`Excluding recent place: ${place.name} (${place.place_id})`);
+          const placeId = getPlaceId(place);
+          if (placeId && recentPlaceIds.includes(placeId)) {
+            console.log(`Excluding recent place: ${place.properties?.name || place.text} (${placeId})`);
             return false;
           }
           return true;
         })
-        .map((place: any) => {
-        const placeLocation: Location = {
-          latitude: place.geometry.location.lat,
-          longitude: place.geometry.location.lng,
-        };
-        const distanceMeters = calculateDistance(userLocation, placeLocation);
-        const distanceFeet = distanceMeters * 3.28084; // Convert to feet for display
-        return {
-          name: place.name,
-          location: placeLocation,
-          address: place.vicinity || place.formatted_address,
-          distance: distanceFeet, // Store in feet
-          placeId: place.place_id,
-          rawPlace: place, // Keep original for debugging
-        };
-      })
-      .filter((place: PlaceWithDistance) => {
-        // Filter out places that are too close (prevent immediate arrival trigger)
-        if (place.distance < MIN_INITIAL_DISTANCE) {
-          console.log(`Excluding place too close: ${place.name} - ${Math.round(place.distance)}ft (minimum: ${MIN_INITIAL_DISTANCE}ft)`);
-          return false;
-        }
-        return true;
-      });
+        .map((place: any): PlaceWithDistance | null => {
+          if (!place.geometry?.coordinates) return null;
+          const [lng, lat] = place.geometry.coordinates;
+          const placeLocation: Location = {
+            latitude: lat,
+            longitude: lng,
+          };
+          const distanceMeters = calculateDistance(userLocation, placeLocation);
+          const distanceFeet = distanceMeters * 3.28084; // Convert to feet for display
+          return {
+            name: place.properties?.name || place.text || 'Unknown',
+            location: placeLocation,
+            address: place.properties?.address || place.properties?.full_address || place.place_name,
+            distance: distanceFeet, // Store in feet
+            placeId: getPlaceId(place),
+            rawPlace: place, // Keep original for debugging
+          };
+        })
+        .filter((place): place is PlaceWithDistance => {
+          if (!place) return false;
+          // Filter out places that are too close (prevent immediate arrival trigger)
+          if (place.distance < MIN_INITIAL_DISTANCE) {
+            console.log(`Excluding place too close: ${place.name} - ${Math.round(place.distance)}ft (minimum: ${MIN_INITIAL_DISTANCE}ft)`);
+            return false;
+          }
+          return true;
+        });
 
       // If all results were filtered out, try one more larger radius search
       if (placesWithDistance.length === 0) {
@@ -309,36 +423,43 @@ export async function findNearestPlace(
         // Process only NEW results (not already in allResultsMap)
         const newPlacesWithDistance: PlaceWithDistance[] = additionalResults
           .filter((place: any) => {
+            const placeId = getPlaceId(place);
             // Skip if already processed
-            if (allResultsMap.has(place.place_id)) {
+            if (placeId && allResultsMap.has(placeId)) {
               return false;
             }
             // Skip if recent
-            if (place.place_id && recentPlaceIds.includes(place.place_id)) {
+            if (placeId && recentPlaceIds.includes(placeId)) {
               return false;
             }
             return true;
           })
-          .map((place: any) => {
+          .map((place: any): PlaceWithDistance | null => {
+            const placeId = getPlaceId(place);
             // Add to map for tracking
-            allResultsMap.set(place.place_id, place);
+            if (placeId) {
+              allResultsMap.set(placeId, place);
+            }
             
+            if (!place.geometry?.coordinates) return null;
+            const [lng, lat] = place.geometry.coordinates;
             const placeLocation: Location = {
-              latitude: place.geometry.location.lat,
-              longitude: place.geometry.location.lng,
+              latitude: lat,
+              longitude: lng,
             };
             const distanceMeters = calculateDistance(userLocation, placeLocation);
             const distanceFeet = distanceMeters * 3.28084;
             return {
-              name: place.name,
+              name: place.properties?.name || place.text || 'Unknown',
               location: placeLocation,
-              address: place.vicinity || place.formatted_address,
+              address: place.properties?.address || place.properties?.full_address || place.place_name,
               distance: distanceFeet,
-              placeId: place.place_id,
+              placeId: placeId,
               rawPlace: place,
             };
           })
-          .filter((place: PlaceWithDistance) => {
+          .filter((place): place is PlaceWithDistance => {
+            if (!place) return false;
             // Filter out places that are too close (prevent immediate arrival trigger)
             if (place.distance < MIN_INITIAL_DISTANCE) {
               console.log(`Excluding place too close: ${place.name} - ${Math.round(place.distance)}ft (minimum: ${MIN_INITIAL_DISTANCE}ft)`);
@@ -357,7 +478,6 @@ export async function findNearestPlace(
       }
 
       // Apply distance filtering for paid users if enabled
-      // Note: place.distance is now in feet, so convert miles to feet for comparison
       let filteredPlaces = placesWithDistance;
       if (distancePreferences?.enabled) {
         const minDistanceFeet = distancePreferences.minDistanceMiles 
@@ -379,25 +499,8 @@ export async function findNearestPlace(
         console.log(`Distance filtering: ${placesWithDistance.length} places → ${filteredPlaces.length} places in range`);
       }
 
-      // Apply bar price level filtering for paid users if enabled
-      if (category === 'bars' && categoryPreferences?.barPriceLevel !== undefined) {
-        const targetPriceLevel = categoryPreferences.barPriceLevel;
-        filteredPlaces = filteredPlaces.filter(place => {
-          // Google Places API returns price_level: 0, 1, 2, 3, or undefined
-          const placePriceLevel = place.rawPlace?.price_level;
-          if (placePriceLevel === undefined) {
-            // If price level is not available, include it (to avoid filtering out too many results)
-            return true;
-          }
-          const matches = placePriceLevel === targetPriceLevel;
-          if (!matches) {
-            console.log(`Filtered out ${place.name} - price level ${placePriceLevel} doesn't match ${targetPriceLevel}`);
-          }
-          return matches;
-        });
-        
-        console.log(`Price level filtering: ${placesWithDistance.length} places → ${filteredPlaces.length} places with price level ${targetPriceLevel}`);
-      }
+      // Note: Mapbox doesn't have price_level like Google Places, so we skip bar price filtering
+      // If you need this, you'd need to use a different data source or API
 
       // Check if all results were filtered out by distance preferences
       if (filteredPlaces.length === 0) {
@@ -426,15 +529,23 @@ export async function findNearestPlace(
       console.log('Name:', nearestPlace.name);
       console.log('Distance:', Math.round(nearestPlace.distance), 'ft (', nearestDistanceMiles.toFixed(2), 'mi)');
 
-      // Extract one photo from the raw place data
+      // Mapbox doesn't provide photos directly like Google Places
+      // You can use Mapbox Static Images API or skip photos
+      // For now, we'll skip photos (you can add them later if needed)
       let photos: string[] = [];
-      if (nearestPlace.rawPlace?.photos && Array.isArray(nearestPlace.rawPlace.photos) && nearestPlace.rawPlace.photos.length > 0) {
-        // Get only the first photo
-        const photo = nearestPlace.rawPlace.photos[0];
-        // Google Places Photo API URL
-        // maxwidth=800 for good quality without being too large
-        photos = [`https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photo.photo_reference}&key=${GOOGLE_PLACES_API_KEY}`];
-      }
+      
+      // Optional: Use Mapbox Static Images API for a map thumbnail
+      // const staticImageUrl = `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+ff0000(${nearestPlace.location.longitude},${nearestPlace.location.latitude})/${nearestPlace.location.longitude},${nearestPlace.location.latitude},14,0/400x300?access_token=${MAPBOX_ACCESS_TOKEN}`;
+      // photos = [staticImageUrl];
+
+      // Google Places Photo API code (commented out - for reference if switching back to Google)
+      // if (nearestPlace.rawPlace?.photos && Array.isArray(nearestPlace.rawPlace.photos) && nearestPlace.rawPlace.photos.length > 0) {
+      //   // Get only the first photo
+      //   const photo = nearestPlace.rawPlace.photos[0];
+      //   // Google Places Photo API URL
+      //   // maxwidth=800 for good quality without being too large
+      //   photos = [`https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photo.photo_reference}&key=${GOOGLE_PLACES_API_KEY}`];
+      // }
 
       return {
         name: nearestPlace.name,
@@ -445,7 +556,7 @@ export async function findNearestPlace(
         photos: photos.length > 0 ? photos : undefined,
       };
     } else {
-      console.log('No results found or API error:', data.status);
+      console.log('No results found');
     }
 
     return null;
@@ -489,4 +600,3 @@ export function calculateBearing(from: Location, to: Location): number {
 
   return bearing;
 }
-

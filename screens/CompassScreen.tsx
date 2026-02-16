@@ -21,7 +21,7 @@ import { useHeading } from '../hooks/useHeading';
 import { useNearestPlace } from '../hooks/useNearestPlace';
 import { useDistance } from '../hooks/useDistance';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import { calculateBearing } from '../services/googlePlaces';
+import { calculateBearing } from '../services/mapboxPlaces';
 import { CompassNeedle } from '../components/CompassNeedle';
 import { ARRIVAL_DISTANCE_THRESHOLD, FREE_LOCATIONS_LIMIT } from '../constants';
 import { CATEGORIES } from '../constants';

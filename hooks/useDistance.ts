@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Location } from '../types';
-import { calculateDistance } from '../services/googlePlaces';
+import { calculateDistance } from '../services/mapboxPlaces';
 
 /**
  * Hook to calculate and track distance between two locations

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Location, Place, Category } from '../types';
-import { findNearestPlace } from '../services/googlePlaces';
+import { findNearestPlace } from '../services/mapboxPlaces';
 import { useNetworkStatus } from './useNetworkStatus';
 import { getDistancePreferences, getCachedPlace, cachePlace, getRecentPlaceIds } from '../services/storage';
 import { useAppContext } from '../context/AppContext';
@@ -119,6 +119,17 @@ export function useNearestPlace(
     // Check if category preferences changed
     const categoryPrefsChanged = JSON.stringify(lastCategoryPreferencesRef.current) !== JSON.stringify(categoryPreferences);
     
+    // Don't fetch if we have an auth error - these need manual intervention
+    const hasAuthError = error && (
+      error.message?.toLowerCase().includes('auth') || 
+      error.message?.toLowerCase().includes('token') ||
+      error.message?.toLowerCase().includes('authentication')
+    );
+    
+    if (hasAuthError) {
+      return; // Don't retry on auth errors
+    }
+    
     // Only fetch if:
     // 1. We have a location and category but haven't fetched yet, OR
     // 2. The category has changed (and we need to refetch for new category), OR
@@ -143,6 +154,14 @@ export function useNearestPlace(
   // Auto-retry when coming back online after an error
   useEffect(() => {
     if (isOnline && error && userLocation && category && enabled) {
+      // Don't retry on auth errors - these need manual intervention
+      const errorIsAuth = error.message?.toLowerCase().includes('auth') || 
+                          error.message?.toLowerCase().includes('token') ||
+                          error.message?.toLowerCase().includes('authentication');
+      if (errorIsAuth) {
+        return; // Don't auto-retry auth errors
+      }
+      
       // Only retry if we had an error and now we're online
       const errorIsOffline = error.message?.toLowerCase().includes('internet') || 
                             error.message?.toLowerCase().includes('network');

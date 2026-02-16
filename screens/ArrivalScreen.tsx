@@ -163,6 +163,13 @@ export default function ArrivalScreen() {
 
       <View style={styles.content}>
         {/* Photo Gallery */}
+        {/* Google Places Photo API code (commented out - for reference if switching back to Google):
+         * Photos were fetched from Google Places API using:
+         * const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photo.photo_reference}&key=${GOOGLE_PLACES_API_KEY}`;
+         * 
+         * The photo_reference came from the place's photos array in the Google Places API response.
+         * Up to 3 photos were fetched per place, but we reduced it to 1 photo per place for cost optimization.
+         */}
         {targetPlace.photos && targetPlace.photos.length > 0 ? (
           <Animated.View style={[styles.photoContainer, photoAnimatedStyle]}>
             <ScrollView

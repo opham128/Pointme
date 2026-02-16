@@ -17,19 +17,38 @@ All API key restrictions are configured in the **Google Cloud Console**, not in 
 1. In the Credentials page, find your Google Places API key
 2. Click on the API key name to edit it
 
-### Step 3: Configure Restrictions
+### Step 3: Create Two Separate API Keys
 
-Click **"Restrict key"** or **"Edit"** to configure restrictions:
+**Recommended Approach: Use separate keys for iOS and Android**
 
-#### A. Application Restrictions
+This provides better security and isolation. Create two keys:
 
-**For iOS:**
+#### Create iOS API Key:
+1. Click **"Create Credentials"** → **"API Key"**
+2. Name it: `Pointme iOS Key`
+3. Click **"Restrict key"** to configure restrictions
+
+**Application Restrictions:**
 1. Select **"iOS apps"** from the dropdown
 2. Click **"Add an item"**
 3. Enter your bundle identifier: `com.pointme.app`
 4. Click **"Done"**
 
-**For Android:**
+**API Restrictions:**
+1. Select **"Restrict key"** under API restrictions
+2. Select **"Restrict key to selected APIs"**
+3. Check ONLY:
+   - ✅ **Places API** (this covers Nearby Search, Text Search, and Photos)
+4. Uncheck all other APIs
+5. Click **"Save"**
+6. **Copy the iOS API key** - you'll need it for your `.env` file
+
+#### Create Android API Key:
+1. Click **"Create Credentials"** → **"API Key"**
+2. Name it: `Pointme Android Key`
+3. Click **"Restrict key"** to configure restrictions
+
+**Application Restrictions:**
 1. Select **"Android apps"** from the dropdown
 2. Click **"Add an item"**
 3. Enter:
@@ -37,19 +56,32 @@ Click **"Restrict key"** or **"Edit"** to configure restrictions:
    - **SHA-1 certificate fingerprint**: (see below for how to get this)
 4. Click **"Done"**
 
-**Important**: You need to add BOTH iOS and Android restrictions if you're deploying to both platforms.
-
-#### B. API Restrictions
-
+**API Restrictions:**
 1. Select **"Restrict key"** under API restrictions
 2. Select **"Restrict key to selected APIs"**
 3. Check ONLY:
-   - ✅ **Places API** (or **Places API (New)** if available)
-   - ✅ **Maps JavaScript API** (if you use it for photos)
+   - ✅ **Places API** (this covers Nearby Search, Text Search, and Photos)
 4. Uncheck all other APIs
 5. Click **"Save"**
+6. **Copy the Android API key** - you'll need it for your `.env` file
 
-### Step 4: Get Android SHA-1 Fingerprint
+
+### Step 4: Configure Environment Variables
+
+Add both API keys to your `.env` file:
+
+```bash
+# Platform-specific keys (recommended for production)
+GOOGLE_PLACES_API_KEY_IOS=your_ios_api_key_here
+GOOGLE_PLACES_API_KEY_ANDROID=your_android_api_key_here
+
+# Fallback key (optional, for development)
+GOOGLE_PLACES_API_KEY=your_fallback_key_here
+```
+
+**Note:** The app will automatically use the platform-specific key based on whether it's running on iOS or Android. If platform-specific keys aren't set, it falls back to `GOOGLE_PLACES_API_KEY`.
+
+### Step 5: Get Android SHA-1 Fingerprint
 
 You need the SHA-1 certificate fingerprint for your Android app. This depends on whether you're using:
 - **Google Play App Signing** (recommended) - Use Google's certificate
@@ -101,31 +133,11 @@ eas credentials
 
 Instead of hardcoding your API key, use EAS Secrets for production builds.
 
-### Step 1: Create EAS Secret
-
-```bash
-# Install EAS CLI if you haven't
-npm install -g eas-cli
-
-# Login to EAS
-eas login
-
-# Create a secret for your API key
-eas secret:create --scope project --name GOOGLE_PLACES_API_KEY --value YOUR_ACTUAL_API_KEY
-```
-
-### Step 2: Update Your Code (if needed)
-
-Your code already uses environment variables from `.env`. For production builds, EAS will automatically inject secrets that match environment variable names.
-
-### Step 3: Verify in Build
-
-The secret will be available as `process.env.GOOGLE_PLACES_API_KEY` in your production builds.
 
 ## 📋 Complete Setup Checklist
 
-- [ ] API key created in Google Cloud Console
-- [ ] Places API enabled in Google Cloud Console
+- [x] API key created in Google Cloud Console
+- [x] Places API enabled in Google Cloud Console
 - [ ] iOS restriction added (bundle ID: `com.pointme.app`)
 - [ ] Android restriction added (package: `com.pointme.app`)
 - [ ] Android SHA-1 fingerprint added (from Play Console or keystore)
@@ -137,12 +149,56 @@ The secret will be available as `process.env.GOOGLE_PLACES_API_KEY` in your prod
 ## ⚠️ Important Notes
 
 1. **Propagation Delay**: API key restrictions can take 1-5 minutes to take effect
-2. **Multiple Keys**: Consider using separate API keys for:
-   - Development/testing
-   - Production
-3. **Testing**: Test your API key after adding restrictions to ensure it still works
-4. **Backup**: Keep a backup of your API key in a secure location
-5. **Quotas**: Set up usage quotas in Google Cloud Console to prevent unexpected costs
+2. **Platform-Specific Keys**: The app automatically uses the correct key based on the platform (iOS/Android)
+3. **Fallback Key**: If platform-specific keys aren't set, the app falls back to `GOOGLE_PLACES_API_KEY`
+4. **Testing**: Test your API keys on both platforms after adding restrictions
+5. **Backup**: Keep backups of both API keys in a secure location
+6. **Quotas**: Set up usage quotas in Google Cloud Console to prevent unexpected costs (see below)
+
+## 💰 Setting Up API Quotas & Limits
+
+**Why set quotas?** Prevents unexpected charges if your API key is compromised or if there's a bug causing excessive API calls.
+
+### Step 1: Access Quotas in Google Cloud Console
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Select your project
+3. Navigate to **APIs & Services** → **APIs & Services** → **Dashboard**
+4. Click on **Places API** (or search for it in the API Library)
+5. Click on the **"Quotas"** tab
+
+### Step 2: Set Request Limits
+
+**Recommended limits for a small app:**
+
+1. **Requests per day**: 
+   - Set to a reasonable limit (e.g., 10,000 requests/day)
+   - This covers ~500-1,000 searches per day (each search = 2-10 API calls)
+
+2. **Requests per minute**:
+   - Set to 100-200 requests/minute
+   - Prevents burst usage from causing issues
+
+3. **Requests per user per 100 seconds**:
+   - Set to 50-100 requests
+   - Prevents a single user from making too many rapid requests
+
+### Step 3: Set Up Billing Alerts
+
+1. Go to **Billing** → **Budgets & alerts**
+2. Create a budget:
+   - Set monthly budget (e.g., $10-20)
+   - Add email alerts at 50%, 90%, and 100%
+   - This will notify you if spending approaches your limit
+
+### Step 4: Monitor Usage
+
+1. Go to **APIs & Services** → **Dashboard**
+2. View **Places API** usage metrics
+3. Check **Billing** → **Reports** for cost breakdown
+
+**Note**: Google provides $200 in free credits per month. Monitor your usage to stay within this if possible.
+7. **Development**: For local development, you can use a single unrestricted key in `.env` as `GOOGLE_PLACES_API_KEY`
 
 ## 🧪 Testing Restrictions
 
