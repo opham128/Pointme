@@ -33,6 +33,12 @@ export default function CompassScreen() {
   const { selectedCategory, userLocation, setTargetPlace, arrivalCount, hasPurchased } = useAppContext();
   const heading = useHeading(true);
   const { place, loading, error, refetch } = useNearestPlace(userLocation, selectedCategory, !!userLocation);
+  console.log('📍 CompassScreen received from hook:', {
+    place: place ? place.name : null,
+    loading,
+    error: error ? error.message : null,
+    timestamp: new Date().toISOString(),
+  });
   const { distanceFeet, distanceMiles } = useDistance(userLocation, place?.location || null);
   const isOnline = useNetworkStatus();
   const [hasArrived, setHasArrived] = useState(false);
@@ -122,6 +128,17 @@ export default function CompassScreen() {
     }
   }, [selectedCategory, router]);
 
+  // Debug logging for loading state (MUST be before any conditional returns)
+  useEffect(() => {
+    console.log('🎯 CompassScreen render - loading state:', {
+      loading,
+      hasPlace: !!place,
+      placeName: place ? place.name : null,
+      error: error ? error.message : null,
+      timestamp: new Date().toISOString(),
+    });
+  }, [loading, place, error]);
+
   // Calculate bearing from user to target location
   const bearing = useMemo(() => {
     if (!userLocation || !place) return 0;
@@ -206,7 +223,18 @@ export default function CompassScreen() {
     return null;
   }
 
-  if (loading) {
+  // Defensive check: if we have a place, don't show loading even if loading is true
+  // This prevents stuck loading screen when state updates are out of sync
+  console.log('🔍 CompassScreen render check:', {
+    loading,
+    hasPlace: !!place,
+    placeName: place ? place.name : null,
+    selectedCategory,
+    timestamp: new Date().toISOString(),
+  });
+  
+  if (loading && !place) {
+    console.log('⏸️ CompassScreen showing loading screen - loading:', loading, 'hasPlace:', !!place);
     return (
       <View style={[styles.container, { backgroundColor: '#000000' }]}>
         <ActivityIndicator size="large" color="#FFFFFF" />

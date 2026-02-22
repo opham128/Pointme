@@ -147,17 +147,52 @@ export default function ArrivalScreen() {
     const { latitude, longitude } = targetPlace.location;
     const placeName = encodeURIComponent(targetPlace.name);
     
-    // Use web URL that works through Safari
-    let webUrl: string;
-    if (targetPlace.placeId) {
-      webUrl = `https://www.google.com/maps/search/?api=1&query=${placeName}&query_place_id=${targetPlace.placeId}`;
+    // Use the simplest, most reliable URL format
+    // This works on both iOS and Android and opens in browser if app isn't available
+    let url: string;
+    
+    if (Platform.OS === 'ios') {
+      // iOS: Try native Google Maps app first
+      url = `comgooglemaps://?q=${latitude},${longitude}&center=${latitude},${longitude}&zoom=14`;
+      
+      try {
+        const canOpen = await Linking.canOpenURL(url);
+        if (canOpen) {
+          await Linking.openURL(url);
+          return;
+        }
+      } catch (err) {
+        // Fall through to web URL
+      }
     } else {
-      webUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+      // Android: Try native app
+      url = `geo:${latitude},${longitude}?q=${latitude},${longitude}(${placeName})`;
+      
+      try {
+        const canOpen = await Linking.canOpenURL(url);
+        if (canOpen) {
+          await Linking.openURL(url);
+          return;
+        }
+      } catch (err) {
+        // Fall through to web URL
+      }
     }
     
-    Linking.openURL(webUrl).catch((err) => {
+    // Fallback to web URL (works everywhere)
+    url = `https://maps.google.com/maps?q=${latitude},${longitude}`;
+    
+    try {
+      await Linking.openURL(url);
+    } catch (err) {
       console.error('Failed to open Google Maps:', err);
-    });
+      // Last resort: try with just coordinates
+      try {
+        await Linking.openURL(`https://maps.google.com/?q=${latitude},${longitude}`);
+      } catch (finalErr) {
+        console.error('All map opening attempts failed:', finalErr);
+      }
+    }
   };
 
   const handleChooseAnother = () => {

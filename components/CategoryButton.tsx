@@ -103,29 +103,29 @@ export function CategoryButton({ category, onPress }: CategoryButtonProps) {
   // Regular button styling
   return (
     <Animated.View style={animatedStyle}>
-      <TouchableOpacity
-        style={[
-          styles.button,
-          {
+    <TouchableOpacity
+      style={[
+        styles.button,
+        {
             backgroundColor: isDark ? '#232325' : '#F8F8F8',
             borderColor: '#3A3A3C',
-          },
-        ]}
+        },
+      ]}
         onPress={handlePress}
         activeOpacity={0.8}
-      >
-        <View style={styles.content}>
-          <Text style={styles.emoji}>{categoryInfo.emoji}</Text>
-          <Text
-            style={[
-              styles.label,
-              { color: isDark ? '#FFFFFF' : '#000000' },
-            ]}
-          >
-            {categoryInfo.label}
-          </Text>
-        </View>
-      </TouchableOpacity>
+    >
+      <View style={styles.content}>
+        <Text style={styles.emoji}>{categoryInfo.emoji}</Text>
+        <Text
+          style={[
+            styles.label,
+            { color: isDark ? '#FFFFFF' : '#000000' },
+          ]}
+        >
+          {categoryInfo.label}
+        </Text>
+      </View>
+    </TouchableOpacity>
     </Animated.View>
   );
 }
