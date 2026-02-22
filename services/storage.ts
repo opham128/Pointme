@@ -12,10 +12,10 @@ const CACHE_EXPIRATION_MS = 10 * 60 * 1000;
 
 interface CachedPlaceResult {
   place: Place | null;
+  places: Place[]; // Store top 5 places for client-side filtering
   cachedAt: number;
   location: Location; // Rounded location used for cache key
   category: Category;
-  distancePreferences?: { minDistanceMiles?: number; maxDistanceMiles?: number; enabled: boolean };
   categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number };
 }
 
@@ -166,39 +166,34 @@ function roundLocationForCache(location: Location): Location {
 }
 
 /**
- * Generate cache key from category, rounded location, distance preferences, and category preferences
+ * Generate cache key from category, rounded location, and category preferences
  */
 function getCacheKey(
   category: Category, 
   location: Location, 
-  distancePreferences?: DistancePreferences,
   categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
 ): string {
   const rounded = roundLocationForCache(location);
-  const prefsKey = distancePreferences?.enabled 
-    ? `${distancePreferences.minDistanceMiles || 0}-${distancePreferences.maxDistanceMiles || 0}`
-    : 'none';
   const categoryPrefsKey = categoryPreferences 
     ? `${categoryPreferences.restaurantCuisine || 'none'}-${categoryPreferences.barPriceLevel ?? 'none'}`
     : 'none';
-  return `${category}-${rounded.latitude.toFixed(3)}-${rounded.longitude.toFixed(3)}-${prefsKey}-${categoryPrefsKey}`;
+  return `${category}-${rounded.latitude.toFixed(3)}-${rounded.longitude.toFixed(3)}-${categoryPrefsKey}`;
 }
 
 /**
- * Get cached place result if available and not expired
+ * Get cached places (top 5) if available and not expired
  */
-export async function getCachedPlace(
+export async function getCachedPlaces(
   category: Category,
   location: Location,
-  distancePreferences?: DistancePreferences,
   categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
-): Promise<Place | null | undefined> {
+): Promise<Place[] | undefined> {
   try {
     const cacheData = await AsyncStorage.getItem(PLACE_CACHE_KEY);
     if (!cacheData) return undefined;
 
     const cache: Record<string, CachedPlaceResult> = JSON.parse(cacheData);
-    const cacheKey = getCacheKey(category, location, distancePreferences, categoryPreferences);
+    const cacheKey = getCacheKey(category, location, categoryPreferences);
     const cached = cache[cacheKey];
 
     if (!cached) return undefined;
@@ -212,21 +207,32 @@ export async function getCachedPlace(
       return undefined;
     }
 
-    return cached.place;
+    return cached.places || (cached.place ? [cached.place] : []); // Return all cached places
   } catch (error) {
-    console.error('Error getting cached place:', error);
+    console.error('Error getting cached places:', error);
     return undefined;
   }
 }
 
 /**
- * Cache a place result
+ * Get cached place result if available and not expired (backward compatibility)
  */
-export async function cachePlace(
+export async function getCachedPlace(
   category: Category,
   location: Location,
-  place: Place | null,
-  distancePreferences?: DistancePreferences,
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
+): Promise<Place | null | undefined> {
+  const places = await getCachedPlaces(category, location, categoryPreferences);
+  return places && places.length > 0 ? places[0] : (places === undefined ? undefined : null);
+}
+
+/**
+ * Cache places (top 5) for a category/location
+ */
+export async function cachePlaces(
+  category: Category,
+  location: Location,
+  places: Place[],
   categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
 ): Promise<void> {
   try {
@@ -249,19 +255,61 @@ export async function cachePlace(
       sorted.slice(0, 10).forEach(([key]) => delete cache[key]);
     }
 
-    const cacheKey = getCacheKey(category, location, distancePreferences, categoryPreferences);
+    const cacheKey = getCacheKey(category, location, categoryPreferences);
+    // Store top 5 places
+    const topPlaces = places.slice(0, 5);
     cache[cacheKey] = {
-      place,
+      place: topPlaces[0] || null, // Keep for backward compatibility
+      places: topPlaces,
       cachedAt: Date.now(),
       location: roundLocationForCache(location),
       category,
-      distancePreferences,
       categoryPreferences,
     };
 
     await AsyncStorage.setItem(PLACE_CACHE_KEY, JSON.stringify(cache));
   } catch (error) {
-    console.error('Error caching place:', error);
+    console.error('Error caching places:', error);
+  }
+}
+
+/**
+ * Cache a place result (backward compatibility - stores single place)
+ */
+export async function cachePlace(
+  category: Category,
+  location: Location,
+  place: Place | null,
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
+): Promise<void> {
+  if (place) {
+    await cachePlaces(category, location, [place], categoryPreferences);
+  } else {
+    await cachePlaces(category, location, [], categoryPreferences);
+  }
+}
+
+/**
+ * Clear a specific cache entry by cache key
+ */
+export async function clearCacheEntry(
+  category: Category,
+  location: Location,
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
+): Promise<void> {
+  try {
+    const cacheData = await AsyncStorage.getItem(PLACE_CACHE_KEY);
+    if (!cacheData) return;
+
+    const cache: Record<string, CachedPlaceResult> = JSON.parse(cacheData);
+    const cacheKey = getCacheKey(category, location, categoryPreferences);
+    
+    if (cache[cacheKey]) {
+      delete cache[cacheKey];
+      await AsyncStorage.setItem(PLACE_CACHE_KEY, JSON.stringify(cache));
+    }
+  } catch (error) {
+    console.error('Error clearing cache entry:', error);
   }
 }
 

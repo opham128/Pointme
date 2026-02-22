@@ -2,7 +2,29 @@ import { useState, useEffect, useRef } from 'react';
 import { Location, Place, Category } from '../types';
 import { findNearestPlace } from '../services/mapboxPlaces';
 import { useNetworkStatus } from './useNetworkStatus';
-import { getDistancePreferences, getCachedPlace, cachePlace, getRecentPlaceIds } from '../services/storage';
+import { getCachedPlace, getCachedPlaces, cachePlace, cachePlaces, getRecentPlaceIds, clearCacheEntry } from '../services/storage';
+import { calculateDistance } from '../services/mapboxPlaces';
+
+// Helper to round location for cache key (matches storage.ts logic)
+function roundLocationForCache(location: Location): Location {
+  return {
+    latitude: Math.round(location.latitude * 1000) / 1000,
+    longitude: Math.round(location.longitude * 1000) / 1000,
+  };
+}
+
+// Helper to generate cache key (matches storage.ts logic)
+function getCacheKey(
+  category: Category,
+  location: Location,
+  categoryPreferences?: { restaurantCuisine?: string; barPriceLevel?: number }
+): string {
+  const rounded = roundLocationForCache(location);
+  const categoryPrefsKey = categoryPreferences 
+    ? `${categoryPreferences.restaurantCuisine || 'none'}-${categoryPreferences.barPriceLevel ?? 'none'}`
+    : 'none';
+  return `${category}-${rounded.latitude.toFixed(3)}-${rounded.longitude.toFixed(3)}-${categoryPrefsKey}`;
+}
 import { useAppContext } from '../context/AppContext';
 
 /**
@@ -35,14 +57,41 @@ export function useNearestPlace(
   const hasFetchedRef = useRef<boolean>(false);
   const initialLocationRef = useRef<Location | null>(null);
   const lastCategoryPreferencesRef = useRef<{ restaurantCuisine?: string; barPriceLevel?: number } | null | undefined>(undefined);
+  const isFetchingRef = useRef<boolean>(false); // Prevent concurrent fetches
+  const currentRequestKeyRef = useRef<string | null>(null); // Track current request to prevent duplicates
 
   const fetchNearestPlace = async (skipCache: boolean = false) => {
     if (!userLocation || !category || !enabled) {
       return;
     }
 
+    // Create a unique key for this request
+    const requestKey = `${category}-${userLocation.latitude.toFixed(4)}-${userLocation.longitude.toFixed(4)}-${JSON.stringify(categoryPreferences)}`;
+    
+    // Prevent concurrent fetches with the same parameters
+    // Check FIRST before any async operations to prevent race conditions
+    if (isFetchingRef.current) {
+      if (currentRequestKeyRef.current === requestKey) {
+        console.log('⚠️ Fetch already in progress for same parameters, skipping duplicate call');
+        // Don't modify ANY state - just return early and let the primary call handle everything
+        return;
+      } else {
+        console.log('⚠️ Different fetch in progress, but allowing this one');
+      }
+    }
+    
+    // Set guard IMMEDIATELY and SYNCHRONOUSLY (before any async operations)
+    isFetchingRef.current = true;
+    currentRequestKeyRef.current = requestKey;
+    
+    // Set loading state ONLY for the primary call (not duplicates)
+    setLoading(true);
+    setError(null);
+
     // Check network status before attempting fetch
     if (!isOnline) {
+      isFetchingRef.current = false;
+      currentRequestKeyRef.current = null;
       setError(new Error('No internet connection. Please check your network and try again.'));
       setPlace(null);
       setLoading(false);
@@ -53,71 +102,153 @@ export function useNearestPlace(
     setError(null);
 
     try {
-      // Get distance preferences if user has purchased
-      let distancePreferences = undefined;
-      if (hasPurchased) {
-        const preferences = await getDistancePreferences();
-        if (preferences.enabled) {
-          distancePreferences = preferences;
-        }
-      }
-
       // Get category preferences from context (set when category was selected)
       const currentCategoryPreferences = hasPurchased && categoryPreferences ? categoryPreferences : undefined;
 
       // Check cache first (unless explicitly skipping)
+      // Only use cache if:
+      // 1. Place hasn't been visited
+      // 2. User hasn't moved too far from cached location (within ~500m)
       if (!skipCache) {
-        const cachedPlace = await getCachedPlace(category, userLocation, distancePreferences, currentCategoryPreferences);
-        if (cachedPlace !== undefined) {
-          // Check if cached place is in recent arrivals - if so, skip cache and fetch new
-          if (cachedPlace && cachedPlace.placeId) {
-            const recentPlaceIds = await getRecentPlaceIds();
-            if (recentPlaceIds.includes(cachedPlace.placeId)) {
-              // Cached place was already visited, skip cache and fetch new
-              console.log(`Cached place ${cachedPlace.name} was already visited, fetching new place`);
-            } else {
-              // Cache hit and not in recent arrivals - use it
-              setPlace(cachedPlace);
-              fetchedCategoryRef.current = category;
-              hasFetchedRef.current = true;
-              initialLocationRef.current = userLocation;
-              setLoading(false);
-              return;
+        const roundedLocation = roundLocationForCache(userLocation);
+        const cachedPlaces = await getCachedPlaces(category, roundedLocation, currentCategoryPreferences);
+        if (cachedPlaces !== undefined) {
+          // Get the cached entry to check the original location
+          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+          const cacheData = await AsyncStorage.getItem('@pointme:place_cache');
+          
+          if (cacheData) {
+            const cache: Record<string, any> = JSON.parse(cacheData);
+            const cacheKey = getCacheKey(category, roundedLocation, currentCategoryPreferences);
+            const cached = cache[cacheKey];
+            
+            if (cached && cached.location) {
+              // Check if user has moved too far from cached location
+              const MAX_CACHE_DISTANCE_METERS = 500; // ~0.3 miles
+              const distanceFromCachedLocation = calculateDistance(userLocation, cached.location);
+              
+              if (distanceFromCachedLocation > MAX_CACHE_DISTANCE_METERS) {
+                // User moved too far - clear cache and fetch new
+                console.log(`User moved ${Math.round(distanceFromCachedLocation)}m from cached location, clearing cache`);
+                await clearCacheEntry(category, roundedLocation, currentCategoryPreferences);
+                // Continue to fetch below
+              } else {
+                // Get recent place IDs to exclude visited places
+                const recentPlaceIds = await getRecentPlaceIds();
+                
+                // Filter out visited places from cached results
+                const unvisitedPlaces = cachedPlaces.filter(place => 
+                  place && place.placeId && !recentPlaceIds.includes(place.placeId)
+                );
+                
+                if (unvisitedPlaces.length > 0) {
+                  // Use the nearest unvisited place from cache
+                  const nearestUnvisited = unvisitedPlaces[0];
+                  isFetchingRef.current = false;
+                  currentRequestKeyRef.current = null;
+                  setPlace(nearestUnvisited);
+                  fetchedCategoryRef.current = category;
+                  hasFetchedRef.current = true;
+                  initialLocationRef.current = userLocation;
+                  setLoading(false);
+                  return;
+                } else if (cachedPlaces.length === 0) {
+                  // Cache hit but no places found (null) - use it
+                  isFetchingRef.current = false;
+                  currentRequestKeyRef.current = null;
+                  setPlace(null);
+                  fetchedCategoryRef.current = category;
+                  hasFetchedRef.current = true;
+                  initialLocationRef.current = userLocation;
+                  setLoading(false);
+                  return;
+                } else {
+                  // All cached places were visited - clear cache and fetch new
+                  console.log(`All ${cachedPlaces.length} cached places were already visited, clearing cache and fetching new results`);
+                  await clearCacheEntry(category, roundedLocation, currentCategoryPreferences);
+                  // Continue to fetch below
+                }
+              }
             }
-          } else {
-            // Cache hit but no place found (null) - use it
-            setPlace(cachedPlace);
-            fetchedCategoryRef.current = category;
-            hasFetchedRef.current = true;
-            initialLocationRef.current = userLocation;
-            setLoading(false);
-            return;
           }
         }
       }
 
       // Cache miss or skipCache - fetch from API
-      const nearestPlace = await findNearestPlace(userLocation, category, distancePreferences, currentCategoryPreferences);
-      setPlace(nearestPlace);
+      console.log('🔄 Starting findNearestPlace...');
+      const nearestPlace = await findNearestPlace(userLocation, category, currentCategoryPreferences);
       
-      // Cache the result
-      await cachePlace(category, userLocation, nearestPlace, distancePreferences, currentCategoryPreferences);
+      console.log('✅ findNearestPlace returned:', nearestPlace ? `${nearestPlace.name} (${nearestPlace.placeId})` : 'null');
       
+      // CRITICAL: Update refs FIRST to prevent useEffect from resetting place
+      // The useEffect checks if category changed, so we must update refs before setting state
       fetchedCategoryRef.current = category;
       hasFetchedRef.current = true;
       initialLocationRef.current = userLocation;
+      
+      // Now update state - refs are already set so useEffect won't interfere
+      // Update all state synchronously to prevent race conditions
+      console.log('📝 Setting place state to:', nearestPlace ? nearestPlace.name : 'null');
+      setPlace(nearestPlace);
+      setError(null);
+      setLoading(false);
+      console.log('✅ State updated - place:', nearestPlace ? nearestPlace.name : 'null', 'loading: false');
+      
+      // Cache the result (do this after setting state so UI updates immediately)
+      // Cache multiple places (top 5) for client-side filtering
+      if (nearestPlace) {
+        // Check if the result includes all places for caching
+        const allPlaces = (nearestPlace as any)._allPlaces || [nearestPlace];
+        // Don't await - let it cache in the background
+        cachePlaces(category, userLocation, allPlaces, currentCategoryPreferences).catch((err: any) => {
+          console.error('Failed to cache places:', err);
+        });
+      }
+      
+      // Clear guard after state is set
+      isFetchingRef.current = false;
+      if (currentRequestKeyRef.current === requestKey) {
+        currentRequestKeyRef.current = null;
+      }
     } catch (err) {
+      // Ignore duplicate call errors - another call is handling the search
+      if (err instanceof Error && err.message === 'DUPLICATE_CALL_BLOCKED') {
+        console.log('⚠️ Duplicate call blocked, waiting for primary call to complete');
+        // Don't modify ANY state - the primary call will handle everything
+        // Just clear the guard for THIS call and return early
+        isFetchingRef.current = false;
+        if (currentRequestKeyRef.current === requestKey) {
+          currentRequestKeyRef.current = null;
+        }
+        // Return early - don't modify loading/error/place state
+        return;
+      }
+      
       const error = err instanceof Error ? err : new Error('Failed to find nearest place');
+      console.error('❌ Error in fetchNearestPlace:', error.message);
       setError(error);
       setPlace(null);
-    } finally {
       setLoading(false);
+      
+      // Clear guard
+      isFetchingRef.current = false;
+      if (currentRequestKeyRef.current === requestKey) {
+        currentRequestKeyRef.current = null;
+      }
     }
   };
 
   useEffect(() => {
-    // Check if category preferences changed
-    const categoryPrefsChanged = JSON.stringify(lastCategoryPreferencesRef.current) !== JSON.stringify(categoryPreferences);
+    // Don't do anything if already fetching - let the current fetch complete
+    if (isFetchingRef.current) {
+      return;
+    }
+    
+    // Check if category preferences actually changed (compare values, not references)
+    // Use a stable string comparison to avoid false positives from object reference changes
+    const currentPrefsStr = JSON.stringify(categoryPreferences || null);
+    const lastPrefsStr = JSON.stringify(lastCategoryPreferencesRef.current || null);
+    const categoryPrefsChanged = currentPrefsStr !== lastPrefsStr;
     
     // Don't fetch if we have an auth error - these need manual intervention
     const hasAuthError = error && (
@@ -138,18 +269,21 @@ export function useNearestPlace(
     const hasLocationButNotFetched = userLocation && !hasFetchedRef.current;
     
     // Reset place when category or preferences change
-    if ((categoryChanged || categoryPrefsChanged) && fetchedCategoryRef.current !== null) {
+    // BUT only if we're not currently fetching AND we have already fetched before
+    // This prevents resetting immediately after we just set it
+    if ((categoryChanged || categoryPrefsChanged) && fetchedCategoryRef.current !== null && !isFetchingRef.current && hasFetchedRef.current) {
       setPlace(null);
       hasFetchedRef.current = false;
     }
     
-    const shouldFetch = (hasLocationButNotFetched || categoryChanged || categoryPrefsChanged) && userLocation && category && enabled;
+    const shouldFetch = (hasLocationButNotFetched || categoryChanged || categoryPrefsChanged) && userLocation && category && enabled && !isFetchingRef.current;
     
     if (shouldFetch) {
-      lastCategoryPreferencesRef.current = categoryPreferences;
+      // Set loading state immediately when starting fetch
+      setLoading(true);
       fetchNearestPlace();
     }
-  }, [category, enabled, userLocation, categoryPreferences]); // Include categoryPreferences to detect filter changes
+  }, [category, enabled, userLocation, categoryPreferences, error]); // Include error to detect auth errors
 
   // Auto-retry when coming back online after an error
   useEffect(() => {

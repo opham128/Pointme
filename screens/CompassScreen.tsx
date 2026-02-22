@@ -218,6 +218,18 @@ export default function CompassScreen() {
   }
 
   if (error || !place) {
+    // Don't show error if we're still loading (might be a duplicate call issue)
+    if (loading) {
+      return (
+        <View style={[styles.container, { backgroundColor: '#000000' }]}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>
+            Finding nearest {CATEGORIES[selectedCategory].label.toLowerCase()}...
+          </Text>
+        </View>
+      );
+    }
+    
     const isOfflineError = error?.message?.toLowerCase().includes('internet') || 
                           error?.message?.toLowerCase().includes('network') ||
                           !isOnline;

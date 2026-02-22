@@ -28,8 +28,7 @@ import { useAppContext } from '../context/AppContext';
 import { useLocation } from '../hooks/useLocation';
 import { clearAllStorage } from '../services/storage';
 import { togglePurchaseStatusDebug } from '../services/purchases';
-import { getDistancePreferences, saveDistancePreferences, DistancePreferences } from '../services/storage';
-import { RESTAURANT_CUISINES, BAR_PRICE_LEVELS } from '../constants';
+import { RESTAURANT_CUISINES } from '../constants';
 
 const ACCENT_COLOR = '#007AFF';
 
@@ -39,67 +38,9 @@ export default function HomeScreen() {
   const { setSelectedCategory, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences } = useAppContext();
   const { location, loading, error, permissionGranted, requestPermission } = useLocation();
   
-  // Distance filtering state (for paid users)
-  const [distanceEnabled, setDistanceEnabled] = useState(false);
-  const [minDistance, setMinDistance] = useState('');
-  const [maxDistance, setMaxDistance] = useState('');
-  
   // Category filtering state (for paid users) - reset each time, not saved
   const [restaurantCuisine, setRestaurantCuisine] = useState<string | null>(null);
-  const [barPriceLevel, setBarPriceLevel] = useState<number | undefined>(undefined);
   const [expandedCategory, setExpandedCategory] = useState<Category | null>(null);
-  
-  // Load distance preferences for paid users
-  useEffect(() => {
-    if (hasPurchased) {
-      getDistancePreferences().then((prefs) => {
-        setDistanceEnabled(prefs.enabled);
-        setMinDistance(prefs.minDistanceMiles?.toString() || '');
-        setMaxDistance(prefs.maxDistanceMiles?.toString() || '');
-      });
-    }
-  }, [hasPurchased]);
-  
-  // Handle distance filter toggle - reset values when disabled
-  const handleDistanceToggle = (value: boolean) => {
-    setDistanceEnabled(value);
-    if (!value) {
-      // Reset min and max when disabling
-      setMinDistance('');
-      setMaxDistance('');
-    }
-  };
-  
-  // Validate and limit to 2 decimal places
-  const handleDistanceChange = (value: string, setter: (value: string) => void) => {
-    // Remove any non-numeric characters except decimal point
-    let cleaned = value.replace(/[^0-9.]/g, '');
-    
-    // Ensure only one decimal point
-    const parts = cleaned.split('.');
-    if (parts.length > 2) {
-      cleaned = parts[0] + '.' + parts.slice(1).join('');
-    }
-    
-    // Limit to 2 decimal places
-    if (parts.length === 2 && parts[1].length > 2) {
-      cleaned = parts[0] + '.' + parts[1].substring(0, 2);
-    }
-    
-    setter(cleaned);
-  };
-  
-  // Auto-save distance preferences when changed
-  useEffect(() => {
-    if (hasPurchased && (distanceEnabled || minDistance || maxDistance)) {
-      const prefs: DistancePreferences = {
-        enabled: distanceEnabled,
-        minDistanceMiles: minDistance ? parseFloat(minDistance) : undefined,
-        maxDistanceMiles: maxDistance ? parseFloat(maxDistance) : undefined,
-      };
-      saveDistancePreferences(prefs);
-    }
-  }, [distanceEnabled, minDistance, maxDistance, hasPurchased]);
 
   
   // Animation values
@@ -148,12 +89,9 @@ export default function HomeScreen() {
 
     // Set category preferences for this search (only if paid user and selections made)
     if (hasPurchased) {
-      const prefs: { restaurantCuisine?: string; barPriceLevel?: number } = {};
+      const prefs: { restaurantCuisine?: string } = {};
       if (category === 'restaurants' && restaurantCuisine !== null) {
         prefs.restaurantCuisine = restaurantCuisine;
-      }
-      if (category === 'bars' && barPriceLevel !== undefined) {
-        prefs.barPriceLevel = barPriceLevel;
       }
       setCategoryPreferences(Object.keys(prefs).length > 0 ? prefs : null);
     } else {
@@ -172,13 +110,13 @@ export default function HomeScreen() {
       return;
     }
 
-    // Only restaurants and bars have filters - others go directly
-    if (category !== 'restaurants' && category !== 'bars') {
+    // Only restaurants have filters - others go directly
+    if (category !== 'restaurants') {
       handleCategorySelect(category);
       return;
     }
 
-    // For restaurants and bars, toggle expansion
+    // For restaurants, toggle expansion
     if (expandedCategory === category) {
       // If already expanded, collapse and proceed with selection
       setExpandedCategory(null);
@@ -387,119 +325,10 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   </>
                 )}
-                
-                {category === 'bars' && (
-                  <>
-                    <Text style={[styles.categoryFilterLabel, { color: '#FFFFFF' }]}>
-                      🍺 Bar Price Range
-                    </Text>
-                    <View style={styles.priceButtonsContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.priceButton,
-                          {
-                            backgroundColor: barPriceLevel === undefined ? '#007AFF' : '#2C2C2E',
-                            borderColor: barPriceLevel === undefined ? '#007AFF' : '#3A3A3C',
-                          },
-                        ]}
-                        onPress={() => setBarPriceLevel(undefined)}
-                      >
-                        <Text style={[styles.priceButtonText, { color: barPriceLevel === undefined ? '#FFFFFF' : '#8E8E93' }]}>
-                          Any
-                        </Text>
-                      </TouchableOpacity>
-                      {BAR_PRICE_LEVELS.map((price) => (
-                        <TouchableOpacity
-                          key={price.value}
-                          style={[
-                            styles.priceButton,
-                            {
-                              backgroundColor: barPriceLevel === price.value ? '#007AFF' : '#2C2C2E',
-                              borderColor: barPriceLevel === price.value ? '#007AFF' : '#3A3A3C',
-                            },
-                          ]}
-                          onPress={() => setBarPriceLevel(price.value)}
-                        >
-                          <Text style={[styles.priceButtonText, { color: barPriceLevel === price.value ? '#FFFFFF' : '#8E8E93' }]}>
-                            {price.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.searchButton, { backgroundColor: '#007AFF' }]}
-                      onPress={() => handleCategorySelect('bars')}
-                    >
-                      <Text style={styles.searchButtonText}>Search</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
               </View>
             )}
           </View>
         ))}
-        
-        {/* Distance Filter (Paid Users Only) */}
-        {hasPurchased && (
-          <View style={[styles.distanceFilterContainer, { backgroundColor: '#1C1C1E' }]}>
-            <View style={styles.distanceFilterHeader}>
-              <Text style={[styles.distanceFilterLabel, { color: '#FFFFFF' }]}>
-                📏 Distance Filter
-              </Text>
-              <Switch
-                value={distanceEnabled}
-                onValueChange={handleDistanceToggle}
-                trackColor={{ false: '#2C2C2E', true: '#007AFF' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            {distanceEnabled && (
-              <View style={styles.distanceInputsRow}>
-                <View style={styles.distanceInputContainer}>
-                  <Text style={[styles.distanceInputLabel, { color: '#8E8E93' }]}>
-                    Min (mi)
-                  </Text>
-                  <TextInput
-                    style={[
-                      styles.distanceInput,
-                      {
-                        backgroundColor: '#2C2C2E',
-                        color: '#FFFFFF',
-                        borderColor: '#3A3A3C',
-                      },
-                    ]}
-                    value={minDistance}
-                    onChangeText={(value) => handleDistanceChange(value, setMinDistance)}
-                    placeholder="0.5"
-                    placeholderTextColor="#8E8E93"
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-                <Text style={[styles.distanceSeparator, { color: '#8E8E93' }]}>to</Text>
-                <View style={styles.distanceInputContainer}>
-                  <Text style={[styles.distanceInputLabel, { color: '#8E8E93' }]}>
-                    Max (mi)
-                  </Text>
-                  <TextInput
-                    style={[
-                      styles.distanceInput,
-                      {
-                        backgroundColor: '#2C2C2E',
-                        color: '#FFFFFF',
-                        borderColor: '#3A3A3C',
-                      },
-                    ]}
-                    value={maxDistance}
-                    onChangeText={(value) => handleDistanceChange(value, setMaxDistance)}
-                    placeholder="10.0"
-                    placeholderTextColor="#8E8E93"
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-              </View>
-            )}
-          </View>
-        )}
       </ScrollView>
 
       <Animated.View style={inviteAnimatedStyle}>
@@ -604,48 +433,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingTop: 30,
     marginBottom: 20,
-  },
-  distanceFilterContainer: {
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 12,
-    marginBottom: 20,
-  },
-  distanceFilterHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  distanceFilterLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  distanceInputsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  distanceInputContainer: {
-    flex: 1,
-  },
-  distanceInputLabel: {
-    fontSize: 12,
-    marginBottom: 6,
-    fontWeight: '500',
-  },
-  distanceInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  distanceSeparator: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginTop: 20,
   },
   expandedFilterContainer: {
     borderRadius: 16,

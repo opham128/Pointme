@@ -155,14 +155,6 @@ export default function PaywallScreen() {
             </Text>
           </View>
           <View style={styles.feature}>
-            <View style={[styles.featureIcon, { backgroundColor: 'rgba(52, 199, 89, 0.2)' }]}>
-              <Text style={[styles.featureIconText, { color: '#34C759' }]}>⇄</Text>
-            </View>
-            <Text style={[styles.featureText, { color: '#FFFFFF' }]}>
-              Control the walk with distance filters
-            </Text>
-          </View>
-          <View style={styles.feature}>
             <View style={[styles.featureIcon, { backgroundColor: 'rgba(175, 82, 222, 0.2)' }]}>
               <Text style={[styles.featureIconText, { color: '#AF52DE' }]}>◆</Text>
             </View>

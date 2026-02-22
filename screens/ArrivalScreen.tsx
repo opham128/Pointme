@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../context/AppContext';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
-import { addArrival } from '../services/storage';
+import { addArrival, clearCacheEntry } from '../services/storage';
 import { FREE_LOCATIONS_LIMIT } from '../constants';
 import Animated, {
   useAnimatedStyle,
@@ -27,7 +27,7 @@ import Animated, {
 export default function ArrivalScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
-  const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory, arrivalCount, hasPurchased, setCategoryPreferences } = useAppContext();
+  const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory, arrivalCount, hasPurchased, setCategoryPreferences, selectedCategory, userLocation, categoryPreferences } = useAppContext();
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [hasSavedArrival, setHasSavedArrival] = useState(false);
   const [imagesReady, setImagesReady] = useState(false);
@@ -48,9 +48,23 @@ export default function ArrivalScreen() {
 
     // Save arrival to history (allow 5th arrival, paywall shows when selecting new category)
     if (!hasSavedArrival) {
-      addArrival(targetPlace).then(() => {
+      addArrival(targetPlace).then(async () => {
         refreshHistory();
         setHasSavedArrival(true);
+        
+        // Clear cache for this category/location since arrival happened
+        // This ensures next query is fresh (location may have changed)
+        if (selectedCategory && userLocation) {
+          const currentCategoryPreferences = hasPurchased && categoryPreferences ? categoryPreferences : undefined;
+          
+          // Round location to match cache key format
+          const roundLocationForCache = (loc: { latitude: number; longitude: number }) => ({
+            latitude: Math.round(loc.latitude * 1000) / 1000,
+            longitude: Math.round(loc.longitude * 1000) / 1000,
+          });
+          
+          await clearCacheEntry(selectedCategory, roundLocationForCache(userLocation), currentCategoryPreferences);
+        }
       });
     }
   }, [targetPlace, hasSavedArrival]);
