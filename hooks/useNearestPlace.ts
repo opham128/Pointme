@@ -45,10 +45,16 @@ export function useNearestPlace(
   const isOnline = useNetworkStatus();
   const { hasPurchased, categoryPreferences } = useAppContext();
   
-  // Simple refs to prevent duplicate fetches
+  // Simple ref to prevent duplicate fetches
   const isFetchingRef = useRef<boolean>(false);
-  const lastLocationRef = useRef<Location | null>(null);
-  const lastCategoryPrefsRef = useRef<string>('');
+  const lastFetchKeyRef = useRef<string | null>(null);
+  
+  // Create a stable key for the current fetch request
+  const getFetchKey = (cat: Category | null, loc: Location | null, prefs: any) => {
+    if (!cat || !loc) return null;
+    const prefsStr = JSON.stringify(prefs || null);
+    return `${cat}-${loc.latitude.toFixed(4)}-${loc.longitude.toFixed(4)}-${prefsStr}`;
+  };
 
   const fetchNearestPlace = async (skipCache: boolean = false) => {
     if (!userLocation || !category || !enabled || isFetchingRef.current) {
@@ -56,8 +62,11 @@ export function useNearestPlace(
     }
 
     isFetchingRef.current = true;
-    setLoading(true);
     setError(null);
+    // Only set loading if we don't have a place yet
+    if (!place || fetchedCategory !== category) {
+      setLoading(true);
+    }
 
     if (!isOnline) {
       isFetchingRef.current = false;
@@ -68,79 +77,36 @@ export function useNearestPlace(
 
     try {
       const currentCategoryPreferences = hasPurchased && categoryPreferences ? categoryPreferences : undefined;
-
-      // Check cache first
-      if (!skipCache) {
-        const roundedLocation = roundLocationForCache(userLocation);
-        const cachedPlaces = await getCachedPlaces(category, roundedLocation, currentCategoryPreferences);
-        if (cachedPlaces !== undefined) {
-          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-          const cacheData = await AsyncStorage.getItem('@pointme:place_cache');
-          
-          if (cacheData) {
-            const cache: Record<string, any> = JSON.parse(cacheData);
-            const cacheKey = getCacheKey(category, roundedLocation, currentCategoryPreferences);
-            const cached = cache[cacheKey];
-            
-            if (cached && cached.location) {
-              const MAX_CACHE_DISTANCE_METERS = 500;
-              const distanceFromCachedLocation = calculateDistance(userLocation, cached.location);
-              
-              if (distanceFromCachedLocation > MAX_CACHE_DISTANCE_METERS) {
-                await clearCacheEntry(category, roundedLocation, currentCategoryPreferences);
-              } else {
-                const recentPlaceIds = await getRecentPlaceIds();
-                const unvisitedPlaces = cachedPlaces.filter(place => 
-                  place && place.placeId && !recentPlaceIds.includes(place.placeId)
-                );
-                
-                if (unvisitedPlaces.length > 0) {
-                  const nearestUnvisited = unvisitedPlaces[0];
-                  setPlace(nearestUnvisited);
-                  setFetchedCategory(category);
-                  setLoading(false);
-                  isFetchingRef.current = false;
-                  lastLocationRef.current = userLocation;
-                  lastCategoryPrefsRef.current = JSON.stringify(categoryPreferences || null);
-                  return;
-                } else if (cachedPlaces.length === 0) {
-                  setPlace(null);
-                  setFetchedCategory(category);
-                  setLoading(false);
-                  isFetchingRef.current = false;
-                  lastLocationRef.current = userLocation;
-                  lastCategoryPrefsRef.current = JSON.stringify(categoryPreferences || null);
-                  return;
-                } else {
-                  await clearCacheEntry(category, roundedLocation, currentCategoryPreferences);
-                }
-              }
-            }
-          }
-        }
-      }
-
       const nearestPlace = await findNearestPlace(userLocation, category, currentCategoryPreferences);
       
+      // Set state - ensure both are set together
       setPlace(nearestPlace);
       setFetchedCategory(category);
       setError(null);
       setLoading(false);
       
+      // Debug: log what we got
       if (nearestPlace) {
-        const allPlaces = (nearestPlace as any)._allPlaces || [nearestPlace];
-        cachePlaces(category, userLocation, allPlaces, currentCategoryPreferences).catch(() => {});
+        console.log('✅ Hook: Place found and set:', nearestPlace.name, 'for category:', category);
+      } else {
+        console.log('⚠️ Hook: No place found for category:', category);
       }
       
-      lastLocationRef.current = userLocation;
-      lastCategoryPrefsRef.current = JSON.stringify(categoryPreferences || null);
       isFetchingRef.current = false;
+      
+      // Update the fetch key to mark this fetch as complete
+      const fetchKey = getFetchKey(category, userLocation, currentCategoryPreferences);
+      lastFetchKeyRef.current = fetchKey;
     } catch (err) {
+      // Handle duplicate call - this is expected, not an error
       if (err instanceof Error && err.message === 'DUPLICATE_CALL_BLOCKED') {
         isFetchingRef.current = false;
+        setLoading(false); // Make sure loading is false
         return;
       }
       
+      // Log actual errors
+      console.error('❌ fetchNearestPlace ERROR:', err);
       const error = err instanceof Error ? err : new Error('Failed to find nearest place');
       setError(error);
       setPlace(null);
@@ -149,36 +115,30 @@ export function useNearestPlace(
     }
   };
 
-  // Main effect: fetch when category/location changes
+  // Main effect: fetch when category/location/preferences actually change
   useEffect(() => {
     if (!userLocation || !category || !enabled) {
       return;
     }
 
-    // If we already have a place for this category, don't fetch again
-    if (place && fetchedCategory === category) {
-      if (loading) {
-        setLoading(false);
-      }
+    const currentFetchKey = getFetchKey(category, userLocation, categoryPreferences);
+    
+    // If we already fetched for this exact combination, don't fetch again
+    if (currentFetchKey === lastFetchKeyRef.current && place && fetchedCategory === category) {
       return;
     }
 
-    // If category changed, clear the place
+    // Clear place and set loading when category actually changes
     if (fetchedCategory !== null && fetchedCategory !== category) {
       setPlace(null);
       setFetchedCategory(null);
+      setLoading(true); // Set loading when category changes
+      setError(null);
     }
 
-    // Check if we need to fetch
-    const categoryPrefsStr = JSON.stringify(categoryPreferences || null);
-    const needsFetch = 
-      !fetchedCategory || 
-      fetchedCategory !== category ||
-      categoryPrefsStr !== lastCategoryPrefsRef.current ||
-      !lastLocationRef.current ||
-      (lastLocationRef.current && calculateDistance(userLocation, lastLocationRef.current) > 50);
-
-    if (needsFetch && !isFetchingRef.current) {
+    // Only fetch if not already fetching and we don't have a place for this category
+    if (!isFetchingRef.current && (!place || fetchedCategory !== category)) {
+      lastFetchKeyRef.current = currentFetchKey;
       fetchNearestPlace();
     }
   }, [category, enabled, categoryPreferences, userLocation?.latitude, userLocation?.longitude]);
@@ -201,10 +161,15 @@ export function useNearestPlace(
     }
   }, [isOnline, error, userLocation, category, enabled]);
 
-  // Simple return: if we have a place for current category, return it. Otherwise return null.
+  // SIMPLIFIED RETURN - if we have a place and category matches, return it
+  // If category changed and we're fetching, show loading (not "no places found")
   const effectivePlace = (place && fetchedCategory === category) ? place : null;
-  const effectiveLoading = effectivePlace ? false : loading;
-
+  
+  // If we're fetching for the current category, show loading
+  // If category changed, we set loading=true in useEffect, so show that
+  // Only show "no places" if we're not loading and don't have a place
+  const effectiveLoading = isFetchingRef.current || loading;
+  
   return {
     place: effectivePlace,
     loading: effectiveLoading,

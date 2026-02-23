@@ -35,8 +35,11 @@ const ACCENT_COLOR = '#007AFF';
 export default function HomeScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
-  const { setSelectedCategory, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences } = useAppContext();
+  const { setSelectedCategory, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences, userLocation: contextLocation } = useAppContext();
   const { location, loading, error, permissionGranted, requestPermission } = useLocation();
+  
+  // Use location from context immediately if available (prevents long loading when navigating back)
+  const effectiveLocation = location || contextLocation;
   
   // Category filtering state (for paid users) - reset each time, not saved
   const [restaurantCuisine, setRestaurantCuisine] = useState<string | null>(null);
@@ -75,7 +78,7 @@ export default function HomeScreen() {
   }, [location, setUserLocation]);
 
   const handleCategorySelect = (category: Category) => {
-    if (!permissionGranted || !location) {
+    if (!permissionGranted || !effectiveLocation) {
       requestPermission();
       return;
     }
@@ -190,7 +193,8 @@ export default function HomeScreen() {
     transform: [{ scale: inviteEmoji.value }],
   }));
 
-  if (loading) {
+  // Only show loading if we don't have location from context either
+  if (loading && !contextLocation) {
     return (
       <View style={[styles.container, { backgroundColor: '#000000' }]}>
         <ActivityIndicator size="large" color="#FFFFFF" />

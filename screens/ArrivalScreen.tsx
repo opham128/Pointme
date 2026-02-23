@@ -7,7 +7,6 @@ import {
   Linking,
   Platform,
   Image,
-  ScrollView,
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -16,6 +15,9 @@ import { useAppContext } from '../context/AppContext';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
 import { addArrival, clearCacheEntry } from '../services/storage';
 import { FREE_LOCATIONS_LIMIT } from '../constants';
+import { MAPBOX_ACCESS_TOKEN as ENV_TOKEN } from '@env';
+
+const MAPBOX_ACCESS_TOKEN = ENV_TOKEN || '';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -30,8 +32,25 @@ export default function ArrivalScreen() {
   const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory, arrivalCount, hasPurchased, setCategoryPreferences, selectedCategory, userLocation, categoryPreferences } = useAppContext();
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [hasSavedArrival, setHasSavedArrival] = useState(false);
-  const [imagesReady, setImagesReady] = useState(false);
+  const [mapImageReady, setMapImageReady] = useState(false);
   const hasAnimatedRef = React.useRef(false);
+  
+  // Generate Mapbox static map URL with pin marker overlay
+  // Format: /styles/v1/{style_id}/static/pin-s-{size}+{color}({lon},{lat})/{lon},{lat},{zoom}/{width}x{height}?access_token={token}
+  // Example: pin-s-l+000(-87.0186,32.4055)/-87.0186,32.4055,14/500x300
+  const screenWidth = Dimensions.get('window').width - 20; // Reduced margin for wider map
+  const mapWidth = Math.round(screenWidth); // Use actual screen width (no @2x in URL)
+  const mapHeight = 300;
+  
+  const lon = targetPlace?.location.longitude;
+  const lat = targetPlace?.location.latitude;
+  
+  // Build URL - try without pin overlay first to test if basic map loads
+  // If this works, we can add the pin back
+  const mapImageUrl = targetPlace && MAPBOX_ACCESS_TOKEN && lon !== undefined && lat !== undefined
+    ? `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${lon},${lat},15/${mapWidth}x${mapHeight}?access_token=${MAPBOX_ACCESS_TOKEN}`
+    : null;
+  
   
   // Staggered animation values
   const photoScale = useSharedValue(0.95);
@@ -69,12 +88,12 @@ export default function ArrivalScreen() {
     }
   }, [targetPlace, hasSavedArrival]);
 
-  // Trigger animations when images are ready (or immediately if no photos)
+  // Trigger animations when map image is ready
   useEffect(() => {
     if (!targetPlace) return;
     
-    // Wait for images to load if photos exist, otherwise animate immediately
-    const shouldAnimate = !targetPlace.photos || targetPlace.photos.length === 0 || imagesReady;
+    // Wait for map image to load, then animate
+    const shouldAnimate = mapImageReady;
     
     if (shouldAnimate && !hasAnimatedRef.current) {
       // Haptic feedback for arrival (success notification)
@@ -113,7 +132,7 @@ export default function ArrivalScreen() {
       
       hasAnimatedRef.current = true;
     }
-  }, [targetPlace, imagesReady]);
+  }, [targetPlace, mapImageReady]);
 
   // Redirect if no target place
   useEffect(() => {
@@ -211,55 +230,58 @@ export default function ArrivalScreen() {
       <ConfettiAnimation trigger={confettiTrigger} />
 
       <View style={styles.content}>
-        {/* Photo Gallery */}
-        {/* Google Places Photo API code (commented out - for reference if switching back to Google):
-         * Photos were fetched from Google Places API using:
-         * const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photo.photo_reference}&key=${GOOGLE_PLACES_API_KEY}`;
-         * 
-         * The photo_reference came from the place's photos array in the Google Places API response.
-         * Up to 3 photos were fetched per place, but we reduced it to 1 photo per place for cost optimization.
-         */}
-        {targetPlace.photos && targetPlace.photos.length > 0 ? (
-          <Animated.View style={[styles.photoContainer, photoAnimatedStyle]}>
-            <ScrollView
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              style={styles.photoScrollView}
-              contentContainerStyle={styles.photoScrollContent}
-            >
-              {targetPlace.photos.map((photoUrl, index) => (
-                <Image
-                  key={index}
-                  source={{ uri: photoUrl }}
-                  style={styles.placePhoto}
-                  resizeMode="cover"
-                  onLoadEnd={() => {
-                    if (index === 0) {
-                      setImagesReady(true);
-                    }
-                  }}
-                />
-              ))}
-            </ScrollView>
-            {targetPlace.photos.length > 1 && (
-              <View style={styles.photoIndicatorContainer}>
-                {targetPlace.photos.map((_, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.photoIndicator,
-                      { backgroundColor: 'rgba(255,255,255,0.5)' },
-                    ]}
-                  />
-                ))}
+        {/* Mapbox Map */}
+        {mapImageUrl ? (
+          <Animated.View style={[styles.mapContainer, photoAnimatedStyle]}>
+            <Image
+              source={{ uri: mapImageUrl }}
+              style={styles.mapImage}
+              resizeMode="cover"
+              onLoadEnd={() => {
+                console.log('✅ Map image loaded successfully');
+                setMapImageReady(true);
+              }}
+              onError={(error) => {
+                console.error('❌ Map image failed to load');
+                console.error('Error details:', error.nativeEvent?.error || error);
+                console.error('Map URL (token hidden):', mapImageUrl?.replace(MAPBOX_ACCESS_TOKEN, 'TOKEN_HIDDEN'));
+                
+                // Try to fetch the URL directly to see the actual HTTP error
+                if (mapImageUrl) {
+                  fetch(mapImageUrl)
+                    .then(response => {
+                      console.error('HTTP Status:', response.status, response.statusText);
+                      return response.text();
+                    })
+                    .then(text => {
+                      console.error('Response body:', text.substring(0, 200));
+                    })
+                    .catch(fetchError => {
+                      console.error('Fetch error:', fetchError);
+                    });
+                }
+                
+                setMapImageReady(true); // Still trigger animation even if image fails
+              }}
+            />
+            
+            {/* Pin Marker Overlay (visual enhancement) - only show if map loaded */}
+            {mapImageReady && (
+              <View style={[styles.pinMarker, { marginLeft: -12, marginTop: -24 }]}>
+                <View style={styles.pinDot} />
+                <View style={styles.pinShadow} />
               </View>
             )}
+            
+            {/* Map Attribution */}
+            <View style={styles.mapAttribution}>
+              <Text style={styles.mapAttributionText}>© Mapbox</Text>
+            </View>
           </Animated.View>
         ) : (
-          <Animated.View style={[styles.placeholderPhoto, { backgroundColor: '#2C2C2E' }, photoAnimatedStyle]}>
+          <Animated.View style={[styles.placeholderMap, { backgroundColor: '#2C2C2E' }, photoAnimatedStyle]}>
             <Text style={[styles.placeholderEmoji, { color: '#8E8E93' }]}>
-              📍
+              🗺️
             </Text>
           </Animated.View>
         )}
@@ -360,9 +382,75 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     opacity: 0.6,
   },
-  placeholderPhoto: {
+  mapContainer: {
+    width: Dimensions.get('window').width - 20, // Wider map with less margin
+    height: 300,
+    marginBottom: 24,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
+    position: 'relative',
+    backgroundColor: '#1C1C1E', // Fallback background color in case image doesn't load
+  },
+  mapImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1C1C1E', // Fallback in case image doesn't load
+  },
+  pinMarker: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FF0000',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  pinShadow: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    marginTop: -2,
+  },
+  mapAttribution: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  mapAttributionText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  placeholderMap: {
     width: Dimensions.get('window').width - 40,
-    height: 250,
+    height: 300,
     borderRadius: 20,
     marginBottom: 24,
     justifyContent: 'center',
@@ -378,6 +466,11 @@ const styles = StyleSheet.create({
   },
   placeholderEmoji: {
     fontSize: 64,
+    marginBottom: 8,
+  },
+  placeholderText: {
+    fontSize: 12,
+    textAlign: 'center',
   },
   arrivalText: {
     fontSize: 36,

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -123,7 +124,13 @@ export default function PaywallScreen() {
           </Text>
         </TouchableOpacity>
 
-        <Text style={[styles.emoji, { color: '#FFFFFF' }]}>🧭</Text>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../assets/512.png')}
+            style={styles.logo}
+            resizeMode="cover"
+          />
+        </View>
 
         <Text style={[styles.title, { color: '#FFFFFF' }]}>
         Unlock Your Next Adventure
@@ -159,7 +166,7 @@ export default function PaywallScreen() {
               <Text style={[styles.featureIconText, { color: '#AF52DE' }]}>◆</Text>
             </View>
             <Text style={[styles.featureText, { color: '#FFFFFF' }]}>
-              Pick the cuisine & price
+              Search by cuisine
             </Text>
           </View>
         </View>
@@ -246,10 +253,27 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     opacity: 0.6,
   },
-  emoji: {
-    fontSize: 64,
+  logoContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     marginTop: 20,
     marginBottom: 20,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  logo: {
+    width: '100%',
+    height: '100%',
   },
   title: {
     fontSize: 32,

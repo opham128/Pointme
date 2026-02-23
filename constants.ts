@@ -48,7 +48,6 @@ export const BAR_PRICE_LEVELS = [
   { value: 0, label: '$', description: 'Budget-friendly' },
   { value: 1, label: '$$', description: 'Moderate' },
   { value: 2, label: '$$$', description: 'Expensive' },
-  { value: 3, label: '$$$$', description: 'Very expensive' },
 ] as const;
 
 export const GOOGLE_PLACES_API_BASE_URL = 'https://maps.googleapis.com/maps/api/place';

@@ -26,6 +26,25 @@ export function useLocation(enabled: boolean = true): {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         setPermissionGranted(true);
+        
+        // First, try to get a quick location (lower accuracy, faster)
+        // This prevents long waits when navigating back to home screen
+        try {
+          const quickLocation = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          setLocation({
+            latitude: quickLocation.coords.latitude,
+            longitude: quickLocation.coords.longitude,
+          });
+          setLoading(false); // Set loading to false immediately with quick location
+          setError(null);
+        } catch (quickError) {
+          // If quick location fails, fall back to high accuracy
+          console.log('Quick location failed, using high accuracy');
+        }
+        
+        // Then get high accuracy location in background (for compass/navigation)
         const currentLocation = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.BestForNavigation,
         });
@@ -37,12 +56,12 @@ export function useLocation(enabled: boolean = true): {
       } else {
         setPermissionGranted(false);
         setError(new Error('Location permission denied'));
+        setLoading(false);
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to get location');
       setError(error);
       setPermissionGranted(false);
-    } finally {
       setLoading(false);
     }
   };
