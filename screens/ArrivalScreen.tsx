@@ -166,50 +166,48 @@ export default function ArrivalScreen() {
     const { latitude, longitude } = targetPlace.location;
     const placeName = encodeURIComponent(targetPlace.name);
     
-    // Use the simplest, most reliable URL format
-    // This works on both iOS and Android and opens in browser if app isn't available
+    // Use business name only (no coordinates) for cleaner search
     let url: string;
     
     if (Platform.OS === 'ios') {
-      // iOS: Try native Google Maps app first
-      url = `comgooglemaps://?q=${latitude},${longitude}&center=${latitude},${longitude}&zoom=14`;
+      // iOS: Try native Google Maps app directly (canOpenURL can be unreliable)
+      url = `comgooglemaps://?q=${placeName}&center=${latitude},${longitude}&zoom=14`;
       
       try {
-        const canOpen = await Linking.canOpenURL(url);
-        if (canOpen) {
-          await Linking.openURL(url);
-          return;
-        }
+        await Linking.openURL(url);
+        // If we get here, the app opened successfully
+        return;
       } catch (err) {
-        // Fall through to web URL
+        // App not installed, fall back to Apple Maps
+        console.log('Google Maps app not available, using Apple Maps');
+      }
+      
+      // Fallback to Apple Maps (iOS native)
+      url = `http://maps.apple.com/?q=${placeName}&ll=${latitude},${longitude}`;
+      try {
+        await Linking.openURL(url);
+        return;
+      } catch (err) {
+        console.error('Failed to open maps:', err);
       }
     } else {
-      // Android: Try native app
-      url = `geo:${latitude},${longitude}?q=${latitude},${longitude}(${placeName})`;
+      // Android: Try native Google Maps app with business name
+      url = `google.navigation:q=${placeName}`;
       
       try {
-        const canOpen = await Linking.canOpenURL(url);
-        if (canOpen) {
-          await Linking.openURL(url);
-          return;
-        }
+        await Linking.openURL(url);
+        return;
       } catch (err) {
-        // Fall through to web URL
+        // Fall through to Android Maps (geo URL)
       }
-    }
-    
-    // Fallback to web URL (works everywhere)
-    url = `https://maps.google.com/maps?q=${latitude},${longitude}`;
-    
-    try {
-      await Linking.openURL(url);
-    } catch (err) {
-      console.error('Failed to open Google Maps:', err);
-      // Last resort: try with just coordinates
+      
+      // Fallback to Android Maps (geo URL)
+      url = `geo:0,0?q=${placeName}`;
       try {
-        await Linking.openURL(`https://maps.google.com/?q=${latitude},${longitude}`);
-      } catch (finalErr) {
-        console.error('All map opening attempts failed:', finalErr);
+        await Linking.openURL(url);
+        return;
+      } catch (err) {
+        console.error('Failed to open maps:', err);
       }
     }
   };

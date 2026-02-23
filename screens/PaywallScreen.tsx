@@ -7,11 +7,14 @@ import {
   ActivityIndicator,
   Platform,
   Image,
+  ScrollView,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../context/AppContext';
-import { purchaseFullApp, restorePurchases, initializePurchases } from '../services/purchases';
+import { purchaseFullApp, restorePurchases, initializePurchases, getProducts } from '../services/purchases';
 import { PURCHASE_PRICE } from '../constants';
 import Animated, {
   useAnimatedStyle,
@@ -23,28 +26,48 @@ import Animated, {
 export default function PaywallScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { arrivalCount, refreshPurchaseStatus } = useAppContext();
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [localizedPrice, setLocalizedPrice] = useState<string | null>(null);
 
   // Animation values
   const scale = useSharedValue(0.9);
   const opacity = useSharedValue(1); // Start at 1 to prevent blackout
 
   useEffect(() => {
-      // Show content immediately (even if purchases not available)
+    // Show content immediately (even if purchases not available)
     scale.value = withSequence(
       withSpring(1.02, { damping: 8 }),
       withSpring(1, { damping: 10 })
     );
     // Opacity already at 1, no need to animate it
     
-    // Initialize purchases
-    initializePurchases().then((available) => {
+    // Initialize purchases and get localized price
+    const initPurchases = async () => {
+      const available = await initializePurchases();
       setIsInitialized(available);
-    });
+      
+      if (available) {
+        // Get products to retrieve localized price
+        const products = await getProducts();
+        if (products && products.length > 0 && products[0].price) {
+          // products[0].price is already localized (e.g., "$1.99", "€1.89", "¥299")
+          setLocalizedPrice(products[0].price);
+        } else {
+          // Fallback to hardcoded price if product info not available
+          setLocalizedPrice(`$${PURCHASE_PRICE.toFixed(2)}`);
+        }
+      } else {
+        // Fallback if purchases not available
+        setLocalizedPrice(`$${PURCHASE_PRICE.toFixed(2)}`);
+      }
+    };
+    
+    initPurchases();
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -111,9 +134,29 @@ export default function PaywallScreen() {
     router.back();
   };
 
+  const handleTermsPress = () => {
+    // Replace with your actual Terms of Use URL
+    Linking.openURL('https://opham128.github.io/terms.html');
+  };
+
+  const handlePrivacyPress = () => {
+    // Replace with your actual Privacy Policy URL
+    Linking.openURL('https://opham128.github.io/privacy.html');
+  };
+
+  // Fallback price display
+  const priceDisplay = localizedPrice || `$${PURCHASE_PRICE.toFixed(2)}`;
+
   return (
     <View style={[styles.container, { backgroundColor: '#000000' }]}>
-      <Animated.View style={[styles.content, animatedStyle]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 20) }
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View style={[styles.content, animatedStyle]}>
         <TouchableOpacity
           style={styles.closeButton}
           onPress={handleClose}
@@ -194,7 +237,7 @@ export default function PaywallScreen() {
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text style={styles.purchaseButtonText}>
-                Lifetime Access for ${PURCHASE_PRICE.toFixed(2)}
+                Lifetime Access for {priceDisplay}
               </Text>
             )}
           </TouchableOpacity>
@@ -218,10 +261,22 @@ export default function PaywallScreen() {
           )}
         </TouchableOpacity>
 
-        {/* <Text style={[styles.footerText, { color: '#8E8E93' }]}>
-          Payment will be charged to your {Platform.OS === 'ios' ? 'Apple' : 'Google'} account
-        </Text> */}
-      </Animated.View>
+          {/* Legal Compliance Links */}
+          <View style={styles.legalLinksContainer}>
+            <TouchableOpacity onPress={handleTermsPress}>
+              <Text style={[styles.legalLink, { color: '#8E8E93' }]}>
+                Terms of Use
+              </Text>
+            </TouchableOpacity>
+            <Text style={[styles.legalSeparator, { color: '#8E8E93' }]}> • </Text>
+            <TouchableOpacity onPress={handlePrivacyPress}>
+              <Text style={[styles.legalLink, { color: '#8E8E93' }]}>
+                Privacy Policy
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </ScrollView>
     </View>
   );
 }
@@ -229,9 +284,14 @@ export default function PaywallScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000000',
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+    paddingTop: 20,
   },
   content: {
     width: '100%',
@@ -402,11 +462,19 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
-  // footerText: {
-  //   fontSize: 11,
-  //   textAlign: 'center',
-  //   paddingHorizontal: 20,
-  //   lineHeight: 14,
-  // },
+  legalLinksContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  legalLink: {
+    fontSize: 12,
+    textDecorationLine: 'underline',
+  },
+  legalSeparator: {
+    fontSize: 12,
+    marginHorizontal: 4,
+  },
 });
 

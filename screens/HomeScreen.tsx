@@ -121,9 +121,8 @@ export default function HomeScreen() {
 
     // For restaurants, toggle expansion
     if (expandedCategory === category) {
-      // If already expanded, collapse and proceed with selection
+      // If already expanded, just collapse (don't search)
       setExpandedCategory(null);
-      handleCategorySelect(category);
     } else {
       // Expand to show filter options
       setExpandedCategory(category);
