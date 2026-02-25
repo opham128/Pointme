@@ -3,8 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
-  Easing,
+  withSpring,
   SharedValue,
 } from 'react-native-reanimated';
 
@@ -55,15 +54,17 @@ export function CompassNeedle({ rotation, pulseScale, pulseOpacity }: CompassNee
   const activePulseScale = pulseScale || defaultPulseScale;
   const activePulseOpacity = pulseOpacity || defaultPulseOpacity;
 
-  // Update rotation value when prop changes
+  // Update rotation value when prop changes – very soft, overdamped spring for maximum smoothness (no afterimage)
   React.useEffect(() => {
-    // Normalize the rotation to take the shortest path
     const normalizedTarget = normalizeAngle(rotationValue.value, rotation);
-    
-    // Use withTiming with smooth easing - optimized for triangle rendering
-    rotationValue.value = withTiming(normalizedTarget, {
-      duration: 200, // Faster response for smoother feel with triangles
-      easing: Easing.out(Easing.cubic), // Smooth easing curve similar to Apple's
+    const diff = Math.abs(normalizedTarget - rotationValue.value);
+    // Only animate when the target has moved meaningfully – reduces stutter and visible stepping
+    if (diff < 1.2) return;
+
+    rotationValue.value = withSpring(normalizedTarget, {
+      damping: 28,
+      stiffness: 42,
+      mass: 1.2,
     });
   }, [rotation]);
 

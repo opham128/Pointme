@@ -37,6 +37,7 @@ export default function CompassScreen() {
   const isOnline = useNetworkStatus();
   const [hasArrived, setHasArrived] = useState(false);
   const hasAlignedRef = useRef(false); // Track if we've already triggered alignment haptic
+  const alignmentHapticTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('feet');
   const lastHapticTimeRef = useRef<number>(0);
   
@@ -87,12 +88,17 @@ export default function CompassScreen() {
       false
     );
     
-    // Pulse haptic feedback (every 1.5 seconds when close)
-    const now = Date.now();
-    if (now - lastHapticTimeRef.current > 1500) {
+    // Heartbeat-style haptic (lub-dub) every ~1.5s while close
+    const playHeartbeat = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      lastHapticTimeRef.current = now;
-    }
+      setTimeout(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }, 120);
+    };
+    playHeartbeat();
+    lastHapticTimeRef.current = Date.now();
+    const hapticInterval = setInterval(playHeartbeat, 1500);
+    return () => clearInterval(hapticInterval);
   }, [effectiveDistance, hasArrived]);
 
   // Update target place in context
@@ -151,22 +157,23 @@ export default function CompassScreen() {
     return diff;
   }, [bearing, heading, place]);
 
-  // Haptic feedback when heading aligns with bearing (pointing in the right direction)
+  // Haptic when heading aligns with bearing (within 2°). 100ms delay so it lines up with the needle.
+  // Don't cancel the timeout when they leave the zone – so a quick sweep through still triggers the haptic.
   useEffect(() => {
     if (!place || hasArrived) return;
 
-    // Check if heading and bearing are aligned (within 5 degrees)
-    const alignmentThreshold = 5;
+    const alignmentThreshold = 2;
     const angleDiff = Math.abs(rotation);
-    
+
     if (angleDiff <= alignmentThreshold) {
-      // Only trigger haptic once when we first align
-      if (!hasAlignedRef.current) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        hasAlignedRef.current = true;
+      if (!hasAlignedRef.current && !alignmentHapticTimeoutRef.current) {
+        alignmentHapticTimeoutRef.current = setTimeout(() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          hasAlignedRef.current = true;
+          alignmentHapticTimeoutRef.current = null;
+        }, 100);
       }
     } else {
-      // Reset the flag when we're no longer aligned
       hasAlignedRef.current = false;
     }
   }, [rotation, place, hasArrived]);
@@ -384,7 +391,7 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   distanceText: {
-    fontSize: 32,
+    fontSize: 45,
     fontWeight: 'bold',
     marginBottom: 8,
   },

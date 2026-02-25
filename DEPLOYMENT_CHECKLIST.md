@@ -4,7 +4,8 @@
 
 ### iOS Compatibility
 - ✅ **Location Permissions**: Configured in `app.json` and `Info.plist`
-- ✅ **Google Maps Integration**: `LSApplicationQueriesSchemes` includes `comgooglemaps`
+- ✅ **Places search**: Mapbox Search API (no Google Places key needed)
+- ✅ **Open in Maps**: `LSApplicationQueriesSchemes` includes `comgooglemaps` for Google Maps app
 - ✅ **In-App Purchases**: Uses `expo-in-app-purchases` (iOS compatible)
 - ✅ **Haptics**: Uses `expo-haptics` (iOS compatible)
 - ✅ **Sensors**: Uses `expo-sensors` for magnetometer (iOS compatible)
@@ -12,7 +13,8 @@
 
 ### Android Compatibility
 - ✅ **Location Permissions**: Configured in `app.json` and `AndroidManifest.xml`
-- ✅ **Google Maps Integration**: Uses web URL (works on Android)
+- ✅ **Places search**: Mapbox Search API (no Google Places key needed)
+- ✅ **Open in Maps**: Uses URL schemes (Google Maps app or system maps)
 - ✅ **In-App Purchases**: Uses `expo-in-app-purchases` (Android compatible)
 - ✅ **Haptics**: Uses `expo-haptics` (Android compatible)
 - ✅ **Sensors**: Uses `expo-sensors` for magnetometer (Android compatible)
@@ -28,9 +30,10 @@
 - **Issue**: `IAP_SETUP.md` mentions $2.99, but `constants.ts` has `PURCHASE_PRICE = 1.99`
 - **Action**: Update `IAP_SETUP.md` to reflect $1.99, or update `constants.ts` to $2.99
 
-### 2. Google Maps Opening
-- **Current**: Uses web URL through Safari (works on both platforms)
-- **Note**: Direct app opening was reverted due to issues - current implementation is cross-platform compatible
+### 2. Places & Maps Stack
+- **Places search**: Uses **Mapbox Search API** (`services/mapboxPlaces.ts`), not Google Places
+- **Map image (ArrivalScreen)**: Mapbox Static Images API
+- **Opening in maps**: Uses native URL schemes (Google Maps app first, then Apple/Android maps fallback)
 
 ## 📋 Required Before App Store Submission
 
@@ -70,7 +73,7 @@
   - Must be publicly accessible
   - Must explain what data you collect (location data)
   - Must explain how you use it (finding nearby places)
-  - Must explain third-party services (Google Places API)
+  - Must explain third-party services (Mapbox Search API; Google/Apple Maps when user opens directions)
 - [ ] Privacy Nutrition Labels:
   - Location data collection
   - Third-party advertising (if applicable)
@@ -132,7 +135,7 @@
 - [ ] Data Safety section:
   - Data types: Location
   - Purpose: App functionality
-  - Data sharing: Google Places API
+  - Data sharing: Mapbox (places search, map tiles)
 - [ ] Target audience and content
 - [ ] Content rating
 
@@ -152,20 +155,21 @@
 
 ## 🔒 Security & API Keys
 
-### Google Places API
-- [ ] **API Key Restrictions** (CRITICAL):
-  - Configure in [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
-  - Restrict by iOS bundle ID: `com.pointme.app`
-  - Restrict by Android package name: `com.pointme.app`
-  - Restrict by Android app SHA-1 certificate fingerprint (get from Google Play Console or keystore)
-  - Restrict to only "Places API" (not all Google APIs)
-  - See `GOOGLE_API_KEY_SETUP.md` for detailed instructions
-- [ ] Add API key to EAS secrets:
+### Mapbox (Places Search & Map Tiles)
+- [ ] **Access token** (CRITICAL):
+  - Create or use a token at [Mapbox Account](https://account.mapbox.com/) → Access tokens
+  - Use a **secret** token for production (not a public one if you need to restrict usage)
+  - Restrict token to only the APIs you use (e.g. Search Box API, Static Images) in Mapbox dashboard
+  - Optional: set URL or app restrictions if Mapbox supports them for your plan
+- [ ] Add token to EAS secrets:
   ```bash
-  eas secret:create --scope project --name GOOGLE_PLACES_API_KEY --value YOUR_KEY
+  eas secret:create --scope project --name MAPBOX_ACCESS_TOKEN --value YOUR_TOKEN
   ```
-- [ ] Update `.env` or use EAS secrets in production
-- [ ] Never commit API keys to git
+- [ ] Ensure `.env` has `MAPBOX_ACCESS_TOKEN` for local dev; production should use EAS secrets
+- [ ] Never commit the token to git (`.env` should be in `.gitignore`)
+
+### Google (optional – only for opening directions)
+- [ ] **Google Maps URL schemes** are used to open the Google Maps app for directions; no API key is required for that. If you later add Google Places or other Google APIs, follow `GOOGLE_API_KEY_SETUP.md` and restrict keys by bundle ID / package name.
 
 ### Environment Variables
 - [ ] Set up EAS secrets for production
@@ -181,14 +185,13 @@ You **must** create a privacy policy that covers:
    - How location is used (finding nearby places)
    - When location is collected (when app is in use)
 2. **Third-Party Services**:
-   - Google Places API
-   - What data is shared with Google
-   - Google's privacy policy link
+   - **Mapbox** (Search API for places, static map images) – what data is sent (e.g. location), link to [Mapbox Privacy Policy](https://www.mapbox.com/legal/privacy)
+   - **Google / Apple Maps** (only when user taps “Open in Maps” for directions) – clarify that the app opens the device’s maps app
 3. **Data Storage**:
    - Local storage (arrival history, preferences)
-   - No server-side storage mentioned
+   - No server-side storage of user data
 4. **User Rights**:
-   - How to delete data (clear storage)
+   - How to delete data (clear app data / storage)
    - Contact information
 
 **Privacy Policy Generator Options**:
@@ -277,11 +280,11 @@ Consider adding:
 
 ## ⚠️ Critical Items
 
-1. **Privacy Policy** - REQUIRED for both stores
-2. **API Key Restrictions** - Critical for security
-3. **IAP Product Setup** - Must match product ID exactly
-4. **Testing** - Test on real devices before submission
-5. **Build Configuration** - Ensure production builds work
+1. **Privacy Policy** – REQUIRED for both stores (mention Mapbox and location use)
+2. **Mapbox token** – Set `MAPBOX_ACCESS_TOKEN` in EAS secrets; never commit to git
+3. **IAP Product Setup** – Must match product ID `unlock_full_app` and price ($1.99) exactly
+4. **Testing** – Test on real devices (compass, arrival, paywall, purchase/restore)
+5. **Build Configuration** – Ensure production builds work; assets (e.g. PaywallScreen image) bundle correctly
 
 ## 📚 Resources
 
