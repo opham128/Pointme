@@ -6,6 +6,9 @@ import { hasPurchasedFullApp, initializePurchases } from '../services/purchases'
 interface AppContextType {
   selectedCategory: Category | null;
   setSelectedCategory: (category: Category | null) => void;
+  /** Incremented each time user taps a category or Search on HomeScreen; used so we only run place search when they explicitly request it. */
+  searchTrigger: number;
+  requestSearch: () => void;
   targetPlace: Place | null;
   setTargetPlace: (place: Place | null) => void;
   userLocation: Location | null;
@@ -29,6 +32,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [arrivalCount, setArrivalCount] = useState<number>(0);
   const [hasPurchased, setHasPurchased] = useState<boolean>(false);
   const [categoryPreferences, setCategoryPreferences] = useState<{ restaurantCuisine?: string; barPriceLevel?: number } | null>(null);
+  const [searchTrigger, setSearchTrigger] = useState(0);
+
+  const requestSearch = () => setSearchTrigger((t) => t + 1);
 
   const refreshHistory = async () => {
     const history = await getArrivalHistory();
@@ -54,6 +60,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         selectedCategory,
         setSelectedCategory,
+        searchTrigger,
+        requestSearch,
         targetPlace,
         setTargetPlace,
         userLocation,

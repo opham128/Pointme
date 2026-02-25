@@ -28,8 +28,9 @@ export const CATEGORIES: Record<Category, { label: string; emoji: string; google
   },
 };
 
-export const ARRIVAL_DISTANCE_THRESHOLD = 82; // feet (approximately 25 meters)
-export const MIN_INITIAL_DISTANCE = 100; // feet - minimum distance when place is first loaded to prevent immediate arrival
+export const ARRIVAL_DISTANCE_THRESHOLD = 82; // feet (approximately 25 meters) — arrival screen triggers when within this
+/** Minimum distance for a suggested place (feet). Must be > ARRIVAL_DISTANCE_THRESHOLD so we don't suggest a place that would trigger arrival immediately. */
+export const MIN_INITIAL_DISTANCE = ARRIVAL_DISTANCE_THRESHOLD + 18; // 100 feet
 
 // Restaurant cuisine types (for paid users)
 export const RESTAURANT_CUISINES = [

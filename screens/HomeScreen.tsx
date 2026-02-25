@@ -35,7 +35,7 @@ const ACCENT_COLOR = '#007AFF';
 export default function HomeScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
-  const { setSelectedCategory, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences, userLocation: contextLocation } = useAppContext();
+  const { setSelectedCategory, requestSearch, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences, userLocation: contextLocation } = useAppContext();
   const { location, loading, error, permissionGranted, requestPermission } = useLocation();
   
   // Use location from context immediately if available (prevents long loading when navigating back)
@@ -102,6 +102,7 @@ export default function HomeScreen() {
     }
 
     setExpandedCategory(null); // Collapse after selection
+    requestSearch(); // So useNearestPlace only runs a query when user tapped category/Search here
     setSelectedCategory(category);
     router.push('/compass');
   };

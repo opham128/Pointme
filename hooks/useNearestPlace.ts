@@ -43,12 +43,13 @@ export function useNearestPlace(
   const [fetchedCategory, setFetchedCategory] = useState<Category | null>(null);
   
   const isOnline = useNetworkStatus();
-  const { hasPurchased, categoryPreferences } = useAppContext();
-  
+  const { hasPurchased, categoryPreferences, searchTrigger } = useAppContext();
+
   // Simple ref to prevent duplicate fetches
   const isFetchingRef = useRef<boolean>(false);
   const lastFetchKeyRef = useRef<string | null>(null);
-  
+  const lastFetchLocationRef = useRef<Location | null>(null);
+
   // Create a stable key for the current fetch request
   const getFetchKey = (cat: Category | null, loc: Location | null, prefs: any) => {
     if (!cat || !loc) return null;
@@ -63,7 +64,6 @@ export function useNearestPlace(
 
     isFetchingRef.current = true;
     setError(null);
-    // Only set loading if we don't have a place yet
     if (!place || fetchedCategory !== category) {
       setLoading(true);
     }
@@ -75,73 +75,91 @@ export function useNearestPlace(
       return;
     }
 
+    const currentCategoryPreferences = hasPurchased && categoryPreferences ? categoryPreferences : undefined;
+    const roundedLoc = roundLocationForCache(userLocation);
+
     try {
-      const currentCategoryPreferences = hasPurchased && categoryPreferences ? categoryPreferences : undefined;
+      if (!skipCache) {
+        const cached = await getCachedPlace(category, roundedLoc, currentCategoryPreferences);
+        if (cached !== undefined) {
+          setPlace(cached);
+          setFetchedCategory(category);
+          setError(null);
+          setLoading(false);
+          isFetchingRef.current = false;
+          lastFetchKeyRef.current = getFetchKey(category, userLocation, currentCategoryPreferences);
+          lastFetchLocationRef.current = { ...userLocation };
+          if (cached) {
+            console.log('✅ Hook: Place from cache:', cached.name, 'for category:', category);
+          }
+          return;
+        }
+      }
+
       const nearestPlace = await findNearestPlace(userLocation, category, currentCategoryPreferences);
-      
-      // Set state - ensure both are set together
+
       setPlace(nearestPlace);
       setFetchedCategory(category);
       setError(null);
       setLoading(false);
-      
-      // Debug: log what we got
+
       if (nearestPlace) {
         console.log('✅ Hook: Place found and set:', nearestPlace.name, 'for category:', category);
+        await cachePlace(category, roundedLoc, nearestPlace, currentCategoryPreferences);
       } else {
         console.log('⚠️ Hook: No place found for category:', category);
       }
-      
+
       isFetchingRef.current = false;
-      
-      // Update the fetch key to mark this fetch as complete
-      const fetchKey = getFetchKey(category, userLocation, currentCategoryPreferences);
-      lastFetchKeyRef.current = fetchKey;
+      lastFetchKeyRef.current = getFetchKey(category, userLocation, currentCategoryPreferences);
+      lastFetchLocationRef.current = { ...userLocation };
     } catch (err) {
-      // Handle duplicate call - this is expected, not an error
       if (err instanceof Error && err.message === 'DUPLICATE_CALL_BLOCKED') {
         isFetchingRef.current = false;
-        setLoading(false); // Make sure loading is false
         return;
       }
-      
-      // Log actual errors
       console.error('❌ fetchNearestPlace ERROR:', err);
-      const error = err instanceof Error ? err : new Error('Failed to find nearest place');
-      setError(error);
+      setError(err instanceof Error ? err : new Error('Failed to find nearest place'));
       setPlace(null);
       setLoading(false);
       isFetchingRef.current = false;
     }
   };
 
-  // Main effect: fetch when category/location/preferences actually change
+  // Run only when user has clicked a category (or Search) on HomeScreen — searchTrigger/category/prefs.
+  // Query the endpoint only when: cache empty OR category changed OR user moved >50m since last fetch.
   useEffect(() => {
     if (!userLocation || !category || !enabled) {
       return;
     }
 
     const currentFetchKey = getFetchKey(category, userLocation, categoryPreferences);
-    
-    // If we already fetched for this exact combination, don't fetch again
-    if (currentFetchKey === lastFetchKeyRef.current && place && fetchedCategory === category) {
+    const movedSignificantly =
+      lastFetchLocationRef.current != null &&
+      calculateDistance(userLocation, lastFetchLocationRef.current) > 50;
+    const categoryChanged = fetchedCategory !== category;
+    const cacheEmpty = !place || fetchedCategory !== category;
+
+    // Requery only if: cache empty, category changed, or moved >50m
+    const shouldQuery = cacheEmpty || categoryChanged || movedSignificantly;
+
+    if (!shouldQuery && currentFetchKey === lastFetchKeyRef.current && place && fetchedCategory === category) {
       return;
     }
 
-    // Clear place and set loading when category actually changes
-    if (fetchedCategory !== null && fetchedCategory !== category) {
+    if (categoryChanged && fetchedCategory !== null) {
+      console.log('[useNearestPlace] Category changed:', fetchedCategory, '->', category);
       setPlace(null);
       setFetchedCategory(null);
-      setLoading(true); // Set loading when category changes
+      setLoading(true);
       setError(null);
     }
 
-    // Only fetch if not already fetching and we don't have a place for this category
-    if (!isFetchingRef.current && (!place || fetchedCategory !== category)) {
+    if (!isFetchingRef.current && shouldQuery) {
       lastFetchKeyRef.current = currentFetchKey;
-      fetchNearestPlace();
+      fetchNearestPlace(movedSignificantly);
     }
-  }, [category, enabled, categoryPreferences, userLocation?.latitude, userLocation?.longitude]);
+  }, [category, enabled, categoryPreferences, searchTrigger]);
 
   // Auto-retry when coming back online
   useEffect(() => {

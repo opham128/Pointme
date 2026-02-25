@@ -25,12 +25,11 @@ const RANDOM_CATEGORIES = [
   'park',
   'theater',
   'cinema',
-  'stadium',
   'zoo',
   'aquarium',
   'art_gallery',
   'monument',
-  'library',
+  'landmark'
 ];
 
 // Map cuisine types to Mapbox search terms
@@ -178,8 +177,8 @@ async function searchWithRadius(
         // Debug: log first few features to see what's happening
         const featureName = feature.properties?.name || 'unknown';
         
-        // Filter by radius
-        if (distanceMeters > radius) {
+        // Optionally filter by radius (skip when effectively unlimited)
+        if (radius < Number.MAX_SAFE_INTEGER && distanceMeters > radius) {
           if (placeIdMap.size < 3) {
             console.log(`  → Filtered out (distance ${distanceMeters.toFixed(0)}m > radius ${radius}m)`);
           }
@@ -230,9 +229,12 @@ async function searchWithRadius(
   return Array.from(placeIdMap.values());
 }
 
-// Module-level guard to prevent concurrent calls to findNearestPlace
+// Module-level guard and shared result so duplicate callers get the same result (fixes "No Places Found" when effect runs twice)
 let isSearching = false;
 let currentSearchKey: string | null = null;
+let pendingSearchPromise: Promise<Place | null> | null = null;
+let pendingSearchResolve: ((v: Place | null) => void) | null = null;
+let pendingSearchKey: string | null = null;
 
 /**
  * Find the nearest place of a given category using Mapbox Search API category endpoint
@@ -254,25 +256,23 @@ export async function findNearestPlace(
   // Create a unique key for this search request (without distancePreferences to avoid duplicate issues)
   const searchKey = `${category}-${userLocation.latitude.toFixed(6)}-${userLocation.longitude.toFixed(6)}-${JSON.stringify(categoryPreferences)}`;
   
-  // Prevent duplicate concurrent searches with the same parameters
-  // Check and set atomically to prevent race conditions
-  if (isSearching) {
-    if (currentSearchKey === searchKey) {
-      console.log('⚠️ Search already in progress for same parameters, skipping duplicate call');
-      // Throw a special error that the hook can catch and ignore
-      // Don't clear guard here - the primary call will handle it
-      throw new Error('DUPLICATE_CALL_BLOCKED');
-    } else {
-      // Different search parameters - allow it but log
-      console.log('⚠️ Different search in progress, but allowing this one');
-    }
+  // Duplicate call with same key: wait for the in-flight search and return its result (so both callers get the place)
+  if (isSearching && currentSearchKey === searchKey && pendingSearchPromise) {
+    console.log('⚠️ Search already in progress for same parameters, waiting for result');
+    return pendingSearchPromise;
+  }
+  if (isSearching && currentSearchKey !== searchKey) {
+    console.log('⚠️ Different search in progress, but allowing this one');
   }
   
-  // Set guard synchronously (before any async operations) - this prevents race conditions
-  // Track that THIS call set the guard so we only clear it in finally if we set it
-  const thisCallSetGuard = !isSearching;
+  // Set guard and create promise for duplicate callers to await
   isSearching = true;
   currentSearchKey = searchKey;
+  let result: Place | null = null;
+  pendingSearchPromise = new Promise<Place | null>((resolve) => {
+    pendingSearchResolve = resolve;
+  });
+  pendingSearchKey = searchKey;
 
   const categoryInfo = CATEGORIES[category];
 
@@ -281,15 +281,14 @@ export async function findNearestPlace(
     console.log('User location:', userLocation);
     console.log('Category received:', category, 'Category label:', categoryInfo.label);
     
-    // Single radius search - use 5km as default
-    const searchRadius = 5000; // 5km default
+    // No radius limit: keep all results returned by Mapbox (API returns by proximity; we pick nearest)
+    const searchRadius = Number.MAX_SAFE_INTEGER;
     
     // Get recent place IDs early to check against
     const recentPlaceIds = await getRecentPlaceIds();
     console.log('Excluding recent place IDs:', recentPlaceIds);
     
-    // Single search with the determined radius
-    console.log(`Searching with radius: ${searchRadius}m`);
+    console.log('Searching (no radius limit)');
     const results = await searchWithRadius(userLocation, searchRadius, category, categoryInfo, categoryPreferences);
     
     console.log(`✅ searchWithRadius completed, found ${results.length} results`);
@@ -303,7 +302,7 @@ export async function findNearestPlace(
           return false;
         }
         
-        // Calculate distance and check if too close
+        // Exclude places so close they would trigger the arrival screen (MIN_INITIAL_DISTANCE > ARRIVAL_DISTANCE_THRESHOLD)
         if (!place.geometry?.coordinates) return false;
         const [lng, lat] = place.geometry.coordinates;
         const placeLocation: Location = { latitude: lat, longitude: lng };
@@ -351,71 +350,19 @@ export async function findNearestPlace(
         })
         .filter((place): place is PlaceWithDistance => {
           if (!place) return false;
-          // Filter out places that are too close (prevent immediate arrival trigger)
+          // Don't suggest places within arrival range (would trigger arrival screen immediately)
           if (place.distance < MIN_INITIAL_DISTANCE) {
-            console.log(`Excluding place too close: ${place.name} - ${Math.round(place.distance)}ft (minimum: ${MIN_INITIAL_DISTANCE}ft)`);
+            console.log(`Excluding place too close (would trigger arrival): ${place.name} - ${Math.round(place.distance)}ft (min: ${MIN_INITIAL_DISTANCE}ft)`);
             return false;
           }
           return true;
         });
 
-      // If all results were filtered out, try one more larger radius search
+      // (No radius fallback: initial search is already unlimited.)
       if (placesWithDistance.length === 0) {
-        console.log('All results were filtered out. Trying one larger radius...');
-        
-        // Try one larger radius (20km) to find valid results
-        const largerRadius = 20000; // 20km
-        console.log(`Searching with larger radius: ${largerRadius}m`);
-        const additionalResults = await searchWithRadius(userLocation, largerRadius, category, categoryInfo, categoryPreferences);
-        
-        // Process only NEW results (not already in allResultsMap)
-        const newPlacesWithDistance: PlaceWithDistance[] = additionalResults
-          .filter((place: any) => {
-            const placeId = getPlaceId(place);
-            // Skip duplicates (already handled in validResults filter)
-            // No need to check allResultsMap since we're doing a single search
-            // Skip if recent
-            if (placeId && recentPlaceIds.includes(placeId)) {
-              return false;
-            }
-            return true;
-          })
-          .map((place: any): PlaceWithDistance | null => {
-            if (!place.geometry?.coordinates) return null;
-            const [lng, lat] = place.geometry.coordinates;
-            const placeLocation: Location = {
-              latitude: lat,
-              longitude: lng,
-            };
-            const distanceMeters = calculateDistance(userLocation, placeLocation);
-            const distanceFeet = distanceMeters * 3.28084;
-            const placeId = getPlaceId(place);
-            return {
-              name: place.properties?.name || place.text || 'Unknown',
-              location: placeLocation,
-              address: place.properties?.address || place.properties?.full_address || place.place_name,
-              distance: distanceFeet,
-              placeId: placeId,
-              rawPlace: place,
-            };
-          })
-          .filter((place): place is PlaceWithDistance => {
-            if (!place) return false;
-            // Filter out places that are too close (prevent immediate arrival trigger)
-            if (place.distance < MIN_INITIAL_DISTANCE) {
-              console.log(`Excluding place too close: ${place.name} - ${Math.round(place.distance)}ft (minimum: ${MIN_INITIAL_DISTANCE}ft)`);
-              return false;
-            }
-            return true;
-          });
-        
-        if (newPlacesWithDistance.length > 0) {
-          placesWithDistance.push(...newPlacesWithDistance);
-          console.log(`Found ${newPlacesWithDistance.length} valid places in ${largerRadius}m radius`);
-        } else {
-          console.log('No valid places found even after searching larger radius. Returning null.');
-          return null;
-        }
+        console.log('No valid places (all too close or excluded). Returning null.');
+        result = null;
+        return null;
       }
 
       // Sort by distance to find the nearest
@@ -476,40 +423,35 @@ export async function findNearestPlace(
         photos: undefined, // Only cache photos for the nearest
       }));
 
+      result = nearestPlaceResult;
       return nearestPlaceResult;
     } else {
       console.log('No results found');
     }
 
+    result = null;
     return null;
   } catch (error: any) {
+    result = null;
     console.error('Error fetching nearest place:', error);
-    
-    // Check if it's a network/offline error
-    if (error?.message?.toLowerCase().includes('internet') || 
+    // Don't clear guard here — finally will resolve pending promise and clear
+    if (error?.message?.toLowerCase().includes('internet') ||
         error?.message?.toLowerCase().includes('network') ||
         error?.name === 'TypeError' ||
         error?.message?.includes('fetch')) {
-      // Clear guard before throwing (only if this call set it)
-      if (currentSearchKey === searchKey) {
-        isSearching = false;
-        currentSearchKey = null;
-      }
       throw new Error('No internet connection. Please check your network and try again.');
     }
-    
-    // Clear guard before re-throwing (only if this call set it)
-    if (currentSearchKey === searchKey) {
-      isSearching = false;
-      currentSearchKey = null;
-    }
-    // Re-throw the original error if it's not a network error
     throw error;
   } finally {
-    // Only clear the guard if THIS call set it (check by matching search key)
     if (currentSearchKey === searchKey) {
+      if (pendingSearchResolve) {
+        pendingSearchResolve(result);
+        pendingSearchResolve = null;
+      }
       isSearching = false;
       currentSearchKey = null;
+      pendingSearchPromise = null;
+      pendingSearchKey = null;
     }
   }
 }
