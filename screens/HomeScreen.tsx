@@ -7,8 +7,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Share,
-  TextInput,
-  Switch,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -29,6 +27,7 @@ import { useLocation } from '../hooks/useLocation';
 import { clearAllStorage } from '../services/storage';
 import { togglePurchaseStatusDebug } from '../services/purchases';
 import { RESTAURANT_CUISINES } from '../constants';
+import { SORA } from '../constants/fonts';
 
 const ACCENT_COLOR = '#007AFF';
 
@@ -274,7 +273,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {(Object.keys(CATEGORIES) as Category[]).map((category) => (
-          <View key={category}>
+          <View key={category} style={styles.categoryRow}>
             <CategoryButton
               category={category}
               onPress={hasPurchased ? () => handleCategoryPress(category) : handleCategorySelect}
@@ -335,58 +334,18 @@ export default function HomeScreen() {
         ))}
       </ScrollView>
 
-      <Animated.View style={inviteAnimatedStyle}>
+      <Animated.View style={[inviteAnimatedStyle, styles.inviteFooter]}>
         <TouchableOpacity
-          style={[
-            styles.inviteButton,
-            {
-              backgroundColor: 'transparent',
-              borderColor: ACCENT_COLOR,
-            },
-          ]}
+          activeOpacity={0.85}
+          style={styles.inviteButton}
           onPress={handleInviteFriend}
         >
           <Animated.Text style={inviteEmojiAnimatedStyle}>
-            <Text style={styles.inviteEmoji}>👥</Text>
+            <Text style={styles.inviteEmoji}>👤</Text>
           </Animated.Text>
-          <Text style={[styles.inviteButtonText, { color: ACCENT_COLOR }]}>
-            Invite Friend
-          </Text>
+          <Text style={styles.inviteButtonTitle}>Invite a friend</Text>
         </TouchableOpacity>
       </Animated.View>
-
-      {__DEV__ && (
-        <View style={styles.debugContainer}>
-          <TouchableOpacity
-            style={[
-              styles.debugButton,
-              {
-                backgroundColor: '#2C2C2E',
-                borderColor: '#FF9500',
-              },
-            ]}
-            onPress={handleClearStorage}
-          >
-            <Text style={[styles.debugButtonText, { color: '#FF9500' }]}>
-              🧪 Clear Storage
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.debugButton,
-              {
-                backgroundColor: '#2C2C2E',
-                borderColor: hasPurchased ? '#34C759' : '#FF9500',
-              },
-            ]}
-            onPress={handleTogglePurchase}
-          >
-            <Text style={[styles.debugButtonText, { color: hasPurchased ? '#34C759' : '#FF9500' }]}>
-              {hasPurchased ? '✅ Paid User' : '🔓 Free User'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
     </View>
   );
 }
@@ -416,6 +375,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 42,
     fontWeight: 'bold',
+    fontFamily: SORA.Bold,
     textAlign: 'center',
     paddingTop: 80,
   },
@@ -431,12 +391,14 @@ const styles = StyleSheet.create({
   historyButtonText: {
     fontSize: 14,
     fontWeight: '700',
+    fontFamily: SORA.Bold,
   },
   subtitle: {
     fontSize: 18,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
     paddingTop: 30,
-    marginBottom: 20,
+    marginBottom: 30,
   },
   expandedFilterContainer: {
     borderRadius: 16,
@@ -453,6 +415,7 @@ const styles = StyleSheet.create({
   categoryFilterLabel: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
     marginBottom: 12,
   },
   cuisineButtonsContainer: {
@@ -471,6 +434,7 @@ const styles = StyleSheet.create({
   cuisineButtonText: {
     fontSize: 14,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
   priceButtonsContainer: {
     flexDirection: 'row',
@@ -500,6 +464,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
   scrollView: {
     flex: 1,
@@ -507,47 +472,63 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
   },
+  categoryRow: {
+    marginBottom: 4,
+  },
+  inviteFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   loadingText: {
     marginTop: 20,
     fontSize: 16,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
   },
   errorTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+    fontFamily: SORA.Bold,
     textAlign: 'center',
     marginBottom: 12,
   },
   errorText: {
     fontSize: 16,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
     marginBottom: 30,
     paddingHorizontal: 20,
   },
   retryText: {
     fontSize: 14,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
     marginTop: 12,
   },
   inviteButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    marginBottom: 20,
-    marginHorizontal: 20,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(0, 122, 255, 0.14)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 122, 255, 0.35)',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
     gap: 8,
+    minHeight: 52,
   },
   inviteEmoji: {
     fontSize: 20,
   },
-  inviteButtonText: {
+  inviteButtonTitle: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
+    color: '#FFFFFF',
   },
   debugContainer: {
     width: '100%',

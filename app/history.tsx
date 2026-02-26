@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { useRouter } from 'expo-router';
 import { useAppContext } from '../context/AppContext';
 import { clearArrivalHistory } from '../services/storage';
+import { SORA } from '../constants/fonts';
 
 export default function HistoryScreen() {
   const isDark = true; // Always dark mode
@@ -109,6 +110,7 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
   content: {
     flex: 1,
@@ -125,15 +127,18 @@ const styles = StyleSheet.create({
   statsNumber: {
     fontSize: 64,
     fontWeight: 'bold',
+    fontFamily: SORA.Bold,
     marginBottom: 8,
   },
   statsLabel: {
     fontSize: 18,
     fontWeight: '500',
+    fontFamily: SORA.Medium,
   },
   sectionTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+    fontFamily: SORA.Bold,
     marginBottom: 20,
   },
   emptyContainer: {
@@ -142,6 +147,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
   },
   historyItem: {
@@ -155,14 +161,17 @@ const styles = StyleSheet.create({
   historyItemName: {
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
     marginBottom: 4,
   },
   historyItemAddress: {
     fontSize: 14,
+    fontFamily: SORA.Regular,
     marginBottom: 4,
   },
   historyItemDate: {
     fontSize: 12,
+    fontFamily: SORA.Regular,
     marginTop: 4,
   },
   clearButton: {
@@ -175,6 +184,7 @@ const styles = StyleSheet.create({
   clearButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
 });
 

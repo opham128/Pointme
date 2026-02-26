@@ -26,6 +26,8 @@ import { CompassNeedle } from '../components/CompassNeedle';
 import { ARRIVAL_DISTANCE_THRESHOLD, FREE_LOCATIONS_LIMIT } from '../constants';
 import { CATEGORIES } from '../constants';
 import { getDistanceUnit, saveDistanceUnit, DistanceUnit } from '../services/storage';
+import { registerCompassDevHandlers } from '../devTesting';
+import { SORA } from '../constants/fonts';
 
 export default function CompassScreen() {
   const isDark = true; // Always dark mode
@@ -37,7 +39,6 @@ export default function CompassScreen() {
   const isOnline = useNetworkStatus();
   const [hasArrived, setHasArrived] = useState(false);
   const hasAlignedRef = useRef(false); // Track if we've already triggered alignment haptic
-  const alignmentHapticTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('feet');
   const lastHapticTimeRef = useRef<number>(0);
   
@@ -128,6 +129,18 @@ export default function CompassScreen() {
     }
   }, [selectedCategory, router]);
 
+  // Register dev-only test handlers so global.__pointmeDev.testArrival / testPulse work
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    return registerCompassDevHandlers({
+      testArrival: () => {
+        setHasArrived(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setTimeout(() => router.push('/arrival'), 500);
+      },
+      testPulse: (feet) => setDebugCloseDistance(feet),
+    });
+  }, [router]);
 
   // Calculate bearing from user to target location
   const bearing = useMemo(() => {
@@ -157,25 +170,18 @@ export default function CompassScreen() {
     return diff;
   }, [bearing, heading, place]);
 
-  // Haptic when heading aligns with bearing (within 2°). 100ms delay so it lines up with the needle.
-  // Don't cancel the timeout when they leave the zone – so a quick sweep through still triggers the haptic.
+  // Fire haptic when the needle’s animated position enters alignment (synced with visual)
+  const handleNeedleAligned = React.useCallback(() => {
+    if (!hasAlignedRef.current) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      hasAlignedRef.current = true;
+    }
+  }, []);
+
+  // Reset so we can trigger again after user rotates away from alignment
   useEffect(() => {
     if (!place || hasArrived) return;
-
-    const alignmentThreshold = 2;
-    const angleDiff = Math.abs(rotation);
-
-    if (angleDiff <= alignmentThreshold) {
-      if (!hasAlignedRef.current && !alignmentHapticTimeoutRef.current) {
-        alignmentHapticTimeoutRef.current = setTimeout(() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          hasAlignedRef.current = true;
-          alignmentHapticTimeoutRef.current = null;
-        }, 100);
-      }
-    } else {
-      hasAlignedRef.current = false;
-    }
+    if (Math.abs(rotation) > 2) hasAlignedRef.current = false;
   }, [rotation, place, hasArrived]);
 
   // Convert distance for display based on unit preference
@@ -284,6 +290,7 @@ export default function CompassScreen() {
           rotation={rotation} 
           pulseScale={pulseScale}
           pulseOpacity={pulseOpacity}
+          onAligned={!hasArrived ? handleNeedleAligned : undefined}
         />
       </View>
 
@@ -320,36 +327,6 @@ export default function CompassScreen() {
           </Text>
         </View>
       </View>
-
-      {/* Test Buttons (for testing) */}
-      {__DEV__ && (
-        <View style={styles.debugContainer}>
-          <TouchableOpacity
-            style={[styles.testButton, { backgroundColor: '#FF9500' }]}
-            onPress={() => {
-              setHasArrived(true);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              router.push('/arrival');
-            }}
-          >
-            <Text style={styles.testButtonText}>🧪 Test Arrival</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.testButton, { backgroundColor: '#007AFF' }]}
-            onPress={() => {
-              if (debugCloseDistance === null) {
-                setDebugCloseDistance(100); // Simulate 100 feet away
-              } else {
-                setDebugCloseDistance(null); // Reset to actual distance
-              }
-            }}
-          >
-            <Text style={styles.testButtonText}>
-              {debugCloseDistance !== null ? '📍 Stop Pulse Test' : '📍 Test Pulse (100ft)'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* Back button */}
       <TouchableOpacity
@@ -393,11 +370,13 @@ const styles = StyleSheet.create({
   distanceText: {
     fontSize: 45,
     fontWeight: 'bold',
+    //fontFamily: SORA.Bold,
     marginBottom: 8,
   },
   targetName: {
     fontSize: 20,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
     marginBottom: 16,
   },
   headingInfo: {
@@ -407,20 +386,24 @@ const styles = StyleSheet.create({
   headingLabel: {
     fontSize: 14,
     fontWeight: '500',
+    fontFamily: SORA.Medium,
   },
   loadingText: {
     marginTop: 20,
     fontSize: 16,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
   },
   errorTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+    fontFamily: SORA.Bold,
     textAlign: 'center',
     marginBottom: 12,
   },
   errorText: {
     fontSize: 16,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
     marginBottom: 30,
     paddingHorizontal: 20,
@@ -452,10 +435,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
   debugContainer: {
     gap: 12,
@@ -469,6 +454,7 @@ const styles = StyleSheet.create({
   testButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
     color: '#FFFFFF',
   },
   backButton: {
@@ -480,6 +466,7 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
     color: '#FFFFFF',
   },
   unitToggleButton: {
@@ -495,6 +482,7 @@ const styles = StyleSheet.create({
   unitToggleText: {
     fontSize: 14,
     fontWeight: '700',
+    fontFamily: SORA.Bold,
   },
 });
 

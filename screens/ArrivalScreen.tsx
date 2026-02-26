@@ -15,6 +15,7 @@ import { useAppContext } from '../context/AppContext';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
 import { addArrival, clearCacheEntry } from '../services/storage';
 import { FREE_LOCATIONS_LIMIT } from '../constants';
+import { SORA } from '../constants/fonts';
 import { MAPBOX_ACCESS_TOKEN as ENV_TOKEN } from '@env';
 
 const MAPBOX_ACCESS_TOKEN = ENV_TOKEN || '';
@@ -445,6 +446,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.6)',
     fontSize: 10,
     fontWeight: '500',
+    fontFamily: SORA.Medium,
   },
   placeholderMap: {
     width: Dimensions.get('window').width - 40,
@@ -468,11 +470,13 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: 12,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
   },
   arrivalText: {
     fontSize: 36,
     fontWeight: 'bold',
+    fontFamily: SORA.Bold,
     marginBottom: 30,
     textAlign: 'center',
   },
@@ -483,11 +487,13 @@ const styles = StyleSheet.create({
   placeName: {
     fontSize: 28,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
     marginBottom: 8,
     textAlign: 'center',
   },
   placeAddress: {
     fontSize: 16,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
   },
   buttonContainer: {
@@ -514,10 +520,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
   buttonText: {
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
 });
 

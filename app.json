@@ -49,7 +49,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Pointme to use your location to find nearby places."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "scheme": "pointme",
     "extra": {

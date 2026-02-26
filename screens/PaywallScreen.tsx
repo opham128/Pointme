@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../context/AppContext';
 import { purchaseFullApp, restorePurchases, initializePurchases, getProducts } from '../services/purchases';
 import { PURCHASE_PRICE } from '../constants';
+import { SORA } from '../constants/fonts';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -311,6 +312,7 @@ const styles = StyleSheet.create({
   closeButtonText: {
     fontSize: 24,
     fontWeight: '300',
+    fontFamily: SORA.Light,
     opacity: 0.6,
   },
   logoContainer: {
@@ -338,21 +340,24 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
+    fontFamily: SORA.Bold,
     textAlign: 'center',
     marginBottom: 12,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
     marginBottom: 20,
     paddingHorizontal: 10,
   },
   beerText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
     textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 32,
+    marginTop: 16,
+    marginBottom: 20,
     paddingHorizontal: 20,
     fontStyle: 'italic',
   },
@@ -378,9 +383,11 @@ const styles = StyleSheet.create({
   featureIconText: {
     fontSize: 18,
     fontWeight: '500',
+    fontFamily: SORA.Medium,
   },
   featureText: {
     fontSize: 16,
+    fontFamily: SORA.Regular,
     flex: 1,
   },
   priceContainer: {
@@ -390,10 +397,12 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 48,
     fontWeight: 'bold',
+    fontFamily: SORA.Bold,
     marginBottom: 4,
   },
   priceLabel: {
     fontSize: 14,
+    fontFamily: SORA.Regular,
   },
   errorContainer: {
     width: '100%',
@@ -403,6 +412,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
   },
   buttonContainer: {
@@ -429,6 +439,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+    fontFamily: SORA.Bold,
     letterSpacing: 0.2,
     opacity: 1,
   },
@@ -441,6 +452,7 @@ const styles = StyleSheet.create({
   restoreButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
   restoreButtonTextOnly: {
     paddingVertical: 4,
@@ -451,9 +463,11 @@ const styles = StyleSheet.create({
   restoreButtonTextOnlyText: {
     fontSize: 14,
     fontWeight: '400',
+    fontFamily: SORA.Regular,
   },
   lifetimeText: {
     fontSize: 12,
+    fontFamily: SORA.Regular,
     textAlign: 'center',
     marginTop: 4,
     paddingHorizontal: 20,
@@ -470,10 +484,12 @@ const styles = StyleSheet.create({
   },
   legalLink: {
     fontSize: 12,
+    fontFamily: SORA.Regular,
     textDecorationLine: 'underline',
   },
   legalSeparator: {
     fontSize: 12,
+    fontFamily: SORA.Regular,
     marginHorizontal: 4,
   },
 });

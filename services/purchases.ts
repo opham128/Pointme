@@ -296,3 +296,17 @@ export async function togglePurchaseStatusDebug(): Promise<boolean> {
   await savePurchaseStatus(newStatus);
   return newStatus.hasPurchased;
 }
+
+/**
+ * Debug function to set purchase status directly (dev only)
+ */
+export async function setPurchaseStatusDebug(hasPurchased: boolean): Promise<void> {
+  if (!__DEV__) {
+    throw new Error('This function is only available in development mode');
+  }
+  await savePurchaseStatus({
+    hasPurchased,
+    purchaseDate: hasPurchased ? Date.now() : undefined,
+    transactionId: hasPurchased ? 'debug-transaction-id' : undefined,
+  });
+}

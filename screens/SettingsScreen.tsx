@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAppContext } from '../context/AppContext';
+import { SORA } from '../constants/fonts';
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme();
@@ -63,10 +64,12 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
+    fontFamily: SORA.Bold,
     flex: 1,
     textAlign: 'center',
   },
@@ -88,9 +91,11 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
     marginBottom: 4,
   },
   settingDescription: {
     fontSize: 14,
+    fontFamily: SORA.Regular,
   },
 });

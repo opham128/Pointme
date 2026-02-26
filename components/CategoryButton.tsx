@@ -14,6 +14,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { Category } from '../types';
 import { CATEGORIES } from '../constants';
+import { SORA } from '../constants/fonts';
 
 interface CategoryButtonProps {
   category: Category;
@@ -157,5 +158,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
 });

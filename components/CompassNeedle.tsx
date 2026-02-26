@@ -4,6 +4,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  runOnJS,
   SharedValue,
 } from 'react-native-reanimated';
 
@@ -22,6 +23,11 @@ interface CompassNeedleProps {
    * Pulse opacity animation value (for when close to destination)
    */
   pulseOpacity?: SharedValue<number>;
+  /**
+   * Called when the needle’s animated position crosses 0° (i.e. hits the bearing).
+   * Use this to trigger haptics in sync with the visual needle.
+   */
+  onAligned?: () => void;
 }
 
 /**
@@ -42,38 +48,58 @@ function normalizeAngle(current: number, target: number): number {
   return current + diff;
 }
 
-export function CompassNeedle({ rotation, pulseScale, pulseOpacity }: CompassNeedleProps) {
+export function CompassNeedle({ rotation, pulseScale, pulseOpacity, onAligned }: CompassNeedleProps) {
   const isDark = true; // Always dark mode
   
   // Use shared value for smooth animation
   const rotationValue = useSharedValue(rotation);
-  
+  const prevRotation = useSharedValue(rotation);
+  const hasInitialized = useSharedValue(false);
+
   // Default pulse values if not provided
   const defaultPulseScale = useSharedValue(1);
   const defaultPulseOpacity = useSharedValue(0.3);
   const activePulseScale = pulseScale || defaultPulseScale;
   const activePulseOpacity = pulseOpacity || defaultPulseOpacity;
 
-  // Update rotation value when prop changes – very soft, overdamped spring for maximum smoothness (no afterimage)
+  // Update rotation value when prop changes – use spring for smooth, natural needle motion
   React.useEffect(() => {
     const normalizedTarget = normalizeAngle(rotationValue.value, rotation);
     const diff = Math.abs(normalizedTarget - rotationValue.value);
-    // Only animate when the target has moved meaningfully – reduces stutter and visible stepping
-    if (diff < 1.2) return;
+    // Skip tiny updates to reduce jitter from sensor noise (smooth follow)
+    if (diff < 0.4) return;
 
     rotationValue.value = withSpring(normalizedTarget, {
-      damping: 28,
-      stiffness: 42,
-      mass: 1.2,
+      damping: 22,
+      stiffness: 90,
+      mass: 0.8,
     });
   }, [rotation]);
 
-  // Animated style for the needle rotation
+  // Animated style for the needle rotation. Crossing check runs here so haptic fires
+  // in the exact same frame as the visual update (no timing drift).
   const animatedStyle = useAnimatedStyle(() => {
+    const current = rotationValue.value;
+    if (!hasInitialized.value) {
+      prevRotation.value = current;
+      hasInitialized.value = true;
+    } else {
+      const prev = prevRotation.value;
+      prevRotation.value = current;
+      if (onAligned) {
+        const signChange = (prev >= 0 && current < 0) || (prev < 0 && current >= 0);
+        // Fast pass: we skipped the exact zero frame (e.g. went from -0.5° to -3° in one step)
+        const sweptThroughZero =
+          prev < 0 && current < 0 && current < prev && prev > -3;
+        if (signChange || sweptThroughZero) {
+          runOnJS(onAligned)();
+        }
+      }
+    }
     return {
-      transform: [{ rotateZ: `${rotationValue.value}deg` }],
+      transform: [{ rotateZ: `${current}deg` }],
     };
-  });
+  }, [onAligned]);
   
   // Animated style for pulsing glow
   const pulseAnimatedStyle = useAnimatedStyle(() => {
