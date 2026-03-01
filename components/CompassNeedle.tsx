@@ -4,9 +4,9 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  runOnJS,
   SharedValue,
 } from 'react-native-reanimated';
+import { runOnJS } from 'react-native-worklets';
 
 interface CompassNeedleProps {
   /**
@@ -83,6 +83,10 @@ export function CompassNeedle({ rotation, pulseScale, pulseOpacity, onAligned }:
     if (!hasInitialized.value) {
       prevRotation.value = current;
       hasInitialized.value = true;
+      // Already at/near zero when screen loaded (e.g. cached place) – fire so user feels the click
+      if (onAligned && Math.abs(current) <= 2) {
+        runOnJS(onAligned)();
+      }
     } else {
       const prev = prevRotation.value;
       prevRotation.value = current;

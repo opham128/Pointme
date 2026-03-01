@@ -29,7 +29,8 @@ const RANDOM_CATEGORIES = [
   'aquarium',
   'art_gallery',
   'monument',
-  'landmark'
+  'thrift_shop',
+  'tourist_attraction'
 ];
 
 // Map cuisine types to Mapbox search terms
