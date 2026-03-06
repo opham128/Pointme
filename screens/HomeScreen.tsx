@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Share,
+  Linking,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -205,6 +206,8 @@ export default function HomeScreen() {
   }
 
   if (error || !permissionGranted) {
+    const openAppSettings = () => Linking.openSettings();
+
     return (
       <View style={[styles.container, { backgroundColor: '#000000' }]}>
         <Text style={[styles.errorTitle, { color: '#FFFFFF' }]}>
@@ -213,14 +216,24 @@ export default function HomeScreen() {
         <Text style={[styles.errorText, { color: '#8E8E93' }]}>
           {error?.message || 'We need your location to find nearby places.'}
         </Text>
-        <CategoryButton
-          category="restaurants"
-          onPress={async () => {
-            await requestPermission();
-          }}
-        />
+        <TouchableOpacity
+          style={[styles.permissionButton, { backgroundColor: '#007AFF' }]}
+          onPress={() => requestPermission()}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.permissionButtonText}>Grant permission</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.permissionButton, styles.permissionButtonSecondary]}
+          onPress={openAppSettings}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.permissionButtonTextSecondary, { color: '#8E8E93' }]}>
+            Open Settings
+          </Text>
+        </TouchableOpacity>
         <Text style={[styles.retryText, { color: '#8E8E93' }]}>
-          Tap above to grant permission
+          If you denied access, open Settings and enable Location for Point Me.
         </Text>
       </View>
     );
@@ -507,6 +520,31 @@ const styles = StyleSheet.create({
     fontFamily: SORA.Regular,
     textAlign: 'center',
     marginTop: 12,
+    paddingHorizontal: 20,
+  },
+  permissionButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+    minWidth: 200,
+  },
+  permissionButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#3A3A3C',
+  },
+  permissionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: SORA.SemiBold,
+    color: '#FFFFFF',
+  },
+  permissionButtonTextSecondary: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: SORA.SemiBold,
   },
   inviteButton: {
     flexDirection: 'row',
