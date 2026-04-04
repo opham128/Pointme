@@ -64,7 +64,17 @@
           "locationAlwaysAndWhenInUsePermission": "Allow Pointme to use your location to find nearby places."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-splash-screen",
+      {
+        "backgroundColor": "#232323",
+        "image": "./assets/images/appstore.png",
+        "dark": {
+          "image": "./assets/images/appstore.png",
+          "backgroundColor": "#000000"
+        },
+        "imageWidth": 200
+      }
     ],
     "scheme": "pointme",
     "extra": {
