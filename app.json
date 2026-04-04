@@ -4,7 +4,7 @@
     "slug": "pointme",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/appstore.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
@@ -64,17 +64,7 @@
           "locationAlwaysAndWhenInUsePermission": "Allow Pointme to use your location to find nearby places."
         }
       ],
-      "expo-font",
-      "expo-splash-screen",
-      {
-        "backgroundColor": "#232323",
-        "image": "./assets/images/appstore.png",
-        "dark": {
-          "image": "./assets/images/appstore.png",
-          "backgroundColor": "#000000"
-        },
-        "imageWidth": 200
-      }
+      "expo-font"
     ],
     "scheme": "pointme",
     "extra": {
