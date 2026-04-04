@@ -163,9 +163,9 @@
   - Optional: set URL or app restrictions if Mapbox supports them for your plan
 - [ ] Add token to EAS secrets:
   ```bash
-  eas secret:create --scope project --name EXPO_PUBLIC_MAPOX_ACCESS_TOKEN --value YOUR_TOKEN
+  eas secret:create --scope project --name EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN --value YOUR_TOKEN
   ```
-- [ ] Ensure `.env` has `EXPO_PUBLIC_MAPOX_ACCESS_TOKEN` for local dev; production should use EAS secrets
+- [ ] Ensure `.env` has `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` for local dev; production should use EAS secrets
 - [ ] Never commit the token to git (`.env` should be in `.gitignore`)
 
 ### Google (optional – only for opening directions)
@@ -281,7 +281,7 @@ Consider adding:
 ## ⚠️ Critical Items
 
 1. **Privacy Policy** – REQUIRED for both stores (mention Mapbox and location use)
-2. **Mapbox token** – Set `EXPO_PUBLIC_MAPOX_ACCESS_TOKEN` in EAS secrets; never commit to git
+2. **Mapbox token** – Set `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` in EAS secrets; never commit to git
 3. **IAP Product Setup** – Must match product ID `unlock_full_app` and price ($1.99) exactly
 4. **Testing** – Test on real devices (compass, arrival, paywall, purchase/restore)
 5. **Build Configuration** – Ensure production builds work; assets (e.g. PaywallScreen image) bundle correctly

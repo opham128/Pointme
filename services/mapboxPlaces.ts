@@ -1,11 +1,11 @@
 import { Location, Place } from '../types';
 import { CATEGORIES, Category, MIN_INITIAL_DISTANCE } from '../constants';
-import { EXPO_PUBLIC_MAPOX_ACCESS_TOKEN as ENV_TOKEN } from '@env';
+import { EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN as ENV_TOKEN } from '@env';
 import { getRecentPlaceIds } from './storage';
 
 // Mapbox tokens work for both iOS and Android - no platform restrictions needed
 // You can use a single token for both platforms
-const EXPO_PUBLIC_MAPOX_ACCESS_TOKEN = ENV_TOKEN || '';
+const EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN = ENV_TOKEN || '';
 
 
 const MAPBOX_SEARCH_API = 'https://api.mapbox.com/search/searchbox/v1/category';
@@ -111,13 +111,13 @@ async function searchWithRadius(
     let url = `${MAPBOX_SEARCH_API}/${categoryName}?`;
     url += `proximity=${proximity}`;
     url += `&limit=${limit}`;
-    url += `&access_token=${EXPO_PUBLIC_MAPOX_ACCESS_TOKEN}`;
+    url += `&access_token=${EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
 
     // Note: The Search API category endpoint may not support bbox parameter
     // We'll filter by radius client-side after getting results
     
     // Keep logs useful but never print the token
-    console.log('Mapbox Search API URL:', url.replace(EXPO_PUBLIC_MAPOX_ACCESS_TOKEN, 'TOKEN_HIDDEN'));
+    console.log('Mapbox Search API URL:', url.replace(EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN, 'TOKEN_HIDDEN'));
     
     const response = await fetch(url);
     
@@ -250,8 +250,8 @@ export async function findNearestPlace(
   category: Category,
   categoryPreferences?: { restaurantCuisine?: string }
 ): Promise<Place | null> {
-  if (!EXPO_PUBLIC_MAPOX_ACCESS_TOKEN) {
-    throw new Error('Mapbox access token is not configured. Please set EXPO_PUBLIC_MAPOX_ACCESS_TOKEN in your .env file.');
+  if (!EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN) {
+    throw new Error('Mapbox access token is not configured. Please set EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN in your .env file.');
   }
 
   // Create a unique key for this search request (without distancePreferences to avoid duplicate issues)
@@ -393,7 +393,7 @@ export async function findNearestPlace(
       let photos: string[] = [];
       
       // Optional: Use Mapbox Static Images API for a map thumbnail
-      // const staticImageUrl = `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+ff0000(${nearestPlace.location.longitude},${nearestPlace.location.latitude})/${nearestPlace.location.longitude},${nearestPlace.location.latitude},14,0/400x300?access_token=${EXPO_PUBLIC_MAPOX_ACCESS_TOKEN}`;
+      // const staticImageUrl = `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+ff0000(${nearestPlace.location.longitude},${nearestPlace.location.latitude})/${nearestPlace.location.longitude},${nearestPlace.location.latitude},14,0/400x300?access_token=${EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
       // photos = [staticImageUrl];
 
       // Google Places Photo API code (commented out - for reference if switching back to Google)
