@@ -23,8 +23,18 @@
         "LSApplicationQueriesSchemes": [
           "comgooglemaps",
           "googlechromes",
+          "maps",
+          "comgooglemaps",
+          "googlechromes",
+          "maps",
+          "comgooglemaps",
+          "googlechromes",
+          "maps",
+          "comgooglemaps",
+          "googlechromes",
           "maps"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -34,6 +44,10 @@
       },
       "package": "com.pointme.app",
       "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -58,6 +72,12 @@
       "eas": {
         "projectId": "ba633256-9c7b-4a26-b492-852e15c55a5c"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ba633256-9c7b-4a26-b492-852e15c55a5c"
     }
   }
 }

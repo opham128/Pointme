@@ -16,9 +16,9 @@ import { ConfettiAnimation } from '../components/ConfettiAnimation';
 import { addArrival, clearCacheEntry } from '../services/storage';
 import { FREE_LOCATIONS_LIMIT } from '../constants';
 import { SORA } from '../constants/fonts';
-import { MAPBOX_ACCESS_TOKEN as ENV_TOKEN } from '@env';
+import { EXPO_PUBLIC_MAPOX_ACCESS_TOKEN as ENV_TOKEN } from '@env';
 
-const MAPBOX_ACCESS_TOKEN = ENV_TOKEN || '';
+const EXPO_PUBLIC_MAPOX_ACCESS_TOKEN = ENV_TOKEN || '';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -48,8 +48,8 @@ export default function ArrivalScreen() {
   
   // Build URL - try without pin overlay first to test if basic map loads
   // If this works, we can add the pin back
-  const mapImageUrl = targetPlace && MAPBOX_ACCESS_TOKEN && lon !== undefined && lat !== undefined
-    ? `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${lon},${lat},15/${mapWidth}x${mapHeight}?access_token=${MAPBOX_ACCESS_TOKEN}`
+  const mapImageUrl = targetPlace && EXPO_PUBLIC_MAPOX_ACCESS_TOKEN && lon !== undefined && lat !== undefined
+    ? `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${lon},${lat},15/${mapWidth}x${mapHeight}?access_token=${EXPO_PUBLIC_MAPOX_ACCESS_TOKEN}`
     : null;
   
   
@@ -243,7 +243,7 @@ export default function ArrivalScreen() {
               onError={(error) => {
                 console.error('❌ Map image failed to load');
                 console.error('Error details:', error.nativeEvent?.error || error);
-                console.error('Map URL (token hidden):', mapImageUrl?.replace(MAPBOX_ACCESS_TOKEN, 'TOKEN_HIDDEN'));
+                console.error('Map URL (token hidden):', mapImageUrl?.replace(EXPO_PUBLIC_MAPOX_ACCESS_TOKEN, 'TOKEN_HIDDEN'));
                 
                 // Try to fetch the URL directly to see the actual HTTP error
                 if (mapImageUrl) {
