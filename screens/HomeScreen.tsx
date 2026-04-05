@@ -31,6 +31,8 @@ import { RESTAURANT_CUISINES } from '../constants';
 import { SORA } from '../constants/fonts';
 
 const ACCENT_COLOR = '#007AFF';
+const BORDER = '#242424';
+const WHITE  = '#F0EDE6'; 
 
 export default function HomeScreen() {
   const isDark = true; // Always dark mode
@@ -146,7 +148,7 @@ export default function HomeScreen() {
     try {
       const result = await Share.share({
         message: 'Point yourself towards the nearest bar 🍺',
-        title: 'Point Me - Find Nearby Places',
+        title: 'Point Me: Random Bar Compass',
       });
     } catch (error) {
       console.error('Error sharing:', error);
@@ -185,9 +187,7 @@ export default function HomeScreen() {
     transform: [{ scale: pinScale.value }],
   }));
 
-  const inviteAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: inviteScale.value }],
-  }));
+  const inviteAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: inviteScale.value }] }));
 
   const inviteEmojiAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: inviteEmoji.value }],
@@ -347,16 +347,9 @@ export default function HomeScreen() {
         ))}
       </ScrollView>
 
-      <Animated.View style={[inviteAnimatedStyle, styles.inviteFooter]}>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.inviteButton}
-          onPress={handleInviteFriend}
-        >
-          <Animated.Text style={inviteEmojiAnimatedStyle}>
-            <Text style={styles.inviteEmoji}>👤</Text>
-          </Animated.Text>
-          <Text style={styles.inviteButtonTitle}>Invite a friend</Text>
+      <Animated.View style={[styles.inviteFooter, inviteAnimStyle]}>
+        <TouchableOpacity style={styles.inviteButton} onPress={handleInviteFriend} activeOpacity={0.85}>
+          <Text style={styles.inviteText}>👥  Drag a friend along</Text>
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -488,13 +481,7 @@ const styles = StyleSheet.create({
   categoryRow: {
     marginBottom: 4,
   },
-  inviteFooter: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
   loadingText: {
     marginTop: 20,
     fontSize: 16,
@@ -546,28 +533,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: SORA.SemiBold,
   },
+  inviteFooter: {
+    paddingBottom: 34,
+    paddingTop: 12,
+  },
   inviteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0, 122, 255, 0.14)',
-    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(0, 122, 255, 0.35)',
+    borderColor: BORDER,
+    borderRadius: 14,
     paddingVertical: 14,
-    paddingHorizontal: 24,
-    gap: 8,
-    minHeight: 52,
+    alignItems: 'center',
   },
-  inviteEmoji: {
-    fontSize: 20,
-  },
-  inviteButtonTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+  inviteText: {
+    color: WHITE,
     fontFamily: SORA.SemiBold,
-    color: '#FFFFFF',
+    fontSize: 15,
+    letterSpacing: 0.5,
   },
+
+  
   debugContainer: {
     width: '100%',
     paddingHorizontal: 20,

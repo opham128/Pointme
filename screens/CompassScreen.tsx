@@ -38,39 +38,41 @@ export default function CompassScreen() {
   const { distanceFeet, distanceMiles } = useDistance(userLocation, place?.location || null);
   const isOnline = useNetworkStatus();
   const [hasArrived, setHasArrived] = useState(false);
-  const hasAlignedRef = useRef(false); // Track if we've already triggered alignment haptic
+  const hasAlignedRef = useRef(false);
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('feet');
   const lastHapticTimeRef = useRef<number>(0);
-  
+
+  // Hidden reviewer tap state
+  const [tapCount, setTapCount] = useState(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Pulsing glow animation for when close
   const pulseScale = useSharedValue(1);
   const pulseOpacity = useSharedValue(0.3);
-  
+
   // Load distance unit preference
   useEffect(() => {
     getDistanceUnit().then(setDistanceUnit);
   }, []);
-  
+
   // Debug: simulate close distance for testing
   const [debugCloseDistance, setDebugCloseDistance] = useState<number | null>(null);
-  
+
   // Pulse animation and haptics when close (within 200 feet)
   const CLOSE_DISTANCE_THRESHOLD = 200; // feet
   const effectiveDistance = debugCloseDistance !== null ? debugCloseDistance : distanceFeet;
-  
+
   useEffect(() => {
     if (!effectiveDistance || effectiveDistance > CLOSE_DISTANCE_THRESHOLD || hasArrived) {
-      // Stop pulsing if too far or arrived
       pulseScale.value = withTiming(1, { duration: 200 });
       pulseOpacity.value = withTiming(0.3, { duration: 200 });
       return;
     }
-    
-    // Start pulsing - intensity increases as you get closer
-    const distanceRatio = 1 - (effectiveDistance / CLOSE_DISTANCE_THRESHOLD); // 0 to 1
-    const pulseIntensity = 0.3 + (distanceRatio * 0.4); // 0.3 to 0.7 opacity
-    const pulseSpeed = 800 - (distanceRatio * 400); // 800ms to 400ms (faster when closer)
-    
+
+    const distanceRatio = 1 - (effectiveDistance / CLOSE_DISTANCE_THRESHOLD);
+    const pulseIntensity = 0.3 + (distanceRatio * 0.4);
+    const pulseSpeed = 800 - (distanceRatio * 400);
+
     pulseScale.value = withRepeat(
       withSequence(
         withTiming(1.15, { duration: pulseSpeed / 2, easing: Easing.out(Easing.ease) }),
@@ -79,7 +81,7 @@ export default function CompassScreen() {
       -1,
       false
     );
-    
+
     pulseOpacity.value = withRepeat(
       withSequence(
         withTiming(pulseIntensity, { duration: pulseSpeed / 2, easing: Easing.out(Easing.ease) }),
@@ -88,8 +90,7 @@ export default function CompassScreen() {
       -1,
       false
     );
-    
-    // Heartbeat-style haptic (lub-dub) every ~1.5s while close
+
     const playHeartbeat = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setTimeout(() => {
@@ -109,13 +110,11 @@ export default function CompassScreen() {
     }
   }, [place, setTargetPlace]);
 
-  // Check for arrival (ARRIVAL_DISTANCE_THRESHOLD is in feet)
+  // Check for arrival
   useEffect(() => {
     if (distanceFeet !== null && distanceFeet < ARRIVAL_DISTANCE_THRESHOLD && !hasArrived) {
       setHasArrived(true);
-      // Haptic feedback for arrival
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Navigate to arrival screen after a brief delay
       setTimeout(() => {
         router.push('/arrival');
       }, 500);
@@ -129,7 +128,7 @@ export default function CompassScreen() {
     }
   }, [selectedCategory, router]);
 
-  // Register dev-only test handlers so global.__pointmeDev.testArrival / testPulse work
+  // Register dev-only test handlers
   useEffect(() => {
     if (!__DEV__) return undefined;
     return registerCompassDevHandlers({
@@ -142,35 +141,19 @@ export default function CompassScreen() {
     });
   }, [router]);
 
-  // Calculate bearing from user to target location
   const bearing = useMemo(() => {
     if (!userLocation || !place) return 0;
     return calculateBearing(userLocation, place.location);
   }, [userLocation?.latitude, userLocation?.longitude, place?.location.latitude, place?.location.longitude]);
 
-  // Calculate rotation angle for compass needle to point toward target
-  // bearing: direction to target (0-360°, where 0 is North)
-  // heading: device's current orientation (0-360°, where 0 is North)
-  // rotation: how much to rotate the needle = bearing - heading
-  // When rotation = 0, target is straight ahead
-  // When rotation = 90, target is to the right
-  // When rotation = -90, target is to the left
   const rotation = useMemo(() => {
     if (!place) return 0;
-    
     let diff = bearing - heading;
-    
-    // Normalize to -180 to 180 range for shortest rotation path
-    if (diff > 180) {
-      diff -= 360;
-    } else if (diff < -180) {
-      diff += 360;
-    }
-    
+    if (diff > 180) diff -= 360;
+    else if (diff < -180) diff += 360;
     return diff;
   }, [bearing, heading, place]);
 
-  // Fire haptic when the needle’s animated position enters alignment (synced with visual)
   const handleNeedleAligned = React.useCallback(() => {
     if (!hasAlignedRef.current) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -178,20 +161,15 @@ export default function CompassScreen() {
     }
   }, []);
 
-  // Reset so we can trigger again after user rotates away from alignment
   useEffect(() => {
     if (!place || hasArrived) return;
     if (Math.abs(rotation) > 2) hasAlignedRef.current = false;
   }, [rotation, place, hasArrived]);
 
-  // Convert distance for display based on unit preference
-  // All calculations still use feet internally (distanceFeet stays in feet)
-  // MUST be called before any conditional returns (Rules of Hooks)
   const displayDistance = useMemo(() => {
     if (!distanceFeet) return '--';
-    
     if (distanceUnit === 'meters') {
-      const distanceMeters = distanceFeet * 0.3048; // Convert feet to meters
+      const distanceMeters = distanceFeet * 0.3048;
       if (distanceMeters < 1000) {
         return `${Math.round(distanceMeters)}m`;
       } else {
@@ -199,16 +177,14 @@ export default function CompassScreen() {
         return `${distanceKm.toFixed(2)}km`;
       }
     } else {
-      // Default to feet/miles
-      if (distanceFeet < 5280) { // Less than 1 mile
+      if (distanceFeet < 5280) {
         return `${Math.round(distanceFeet)}ft`;
       } else {
         return `${distanceMiles?.toFixed(2) || (distanceFeet / 5280).toFixed(2)}mi`;
       }
     }
   }, [distanceFeet, distanceMiles, distanceUnit]);
-  
-  // Toggle distance unit
+
   const handleToggleUnit = async () => {
     const newUnit: DistanceUnit = distanceUnit === 'feet' ? 'meters' : 'feet';
     setDistanceUnit(newUnit);
@@ -216,12 +192,28 @@ export default function CompassScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  // Hidden reviewer trigger: 5 taps on distance text within 2 seconds
+  const handleSecretTap = () => {
+    if (!__DEV__) return;
+
+    const newCount = tapCount + 1;
+    setTapCount(newCount);
+
+    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+    tapTimerRef.current = setTimeout(() => setTapCount(0), 2000);
+
+    if (newCount >= 5) {
+      setTapCount(0);
+      setHasArrived(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => router.push('/arrival'), 500);
+    }
+  };
+
   if (!selectedCategory) {
     return null;
   }
 
-  // Defensive check: if we have a place, don't show loading even if loading is true
-  // This prevents stuck loading screen when state updates are out of sync
   if (loading && !place) {
     return (
       <View style={[styles.container, { backgroundColor: '#000000' }]}>
@@ -234,7 +226,6 @@ export default function CompassScreen() {
   }
 
   if (error || !place) {
-    // Don't show error if we're still loading (might be a duplicate call issue)
     if (loading) {
       return (
         <View style={[styles.container, { backgroundColor: '#000000' }]}>
@@ -245,18 +236,18 @@ export default function CompassScreen() {
         </View>
       );
     }
-    
-    const isOfflineError = error?.message?.toLowerCase().includes('internet') || 
+
+    const isOfflineError = error?.message?.toLowerCase().includes('internet') ||
                           error?.message?.toLowerCase().includes('network') ||
                           !isOnline;
-    
+
     return (
       <View style={[styles.container, { backgroundColor: '#000000' }]}>
         <Text style={[styles.errorTitle, { color: '#FFFFFF' }]}>
           {isOfflineError ? 'No Internet Connection' : 'No Places Found'}
         </Text>
         <Text style={[styles.errorText, { color: '#8E8E93' }]}>
-          {isOfflineError 
+          {isOfflineError
             ? 'Please check your internet connection and try again.'
             : error?.message || 'Could not find any nearby places. Try a different category.'}
         </Text>
@@ -286,8 +277,8 @@ export default function CompassScreen() {
     <View style={[styles.container, { backgroundColor: '#000000' }]}>
       {/* Compass */}
       <View style={styles.compassContainer}>
-        <CompassNeedle 
-          rotation={rotation} 
+        <CompassNeedle
+          rotation={rotation}
           pulseScale={pulseScale}
           pulseOpacity={pulseOpacity}
           onAligned={!hasArrived ? handleNeedleAligned : undefined}
@@ -296,13 +287,15 @@ export default function CompassScreen() {
 
       {/* Info Panel */}
       <View style={styles.infoContainer}>
-        <Text
-          style={[styles.distanceText, { color: '#FFFFFF' }]}
-          numberOfLines={1}
-        >
-          {displayDistance}
-        </Text>
-        
+        <TouchableOpacity onPress={handleSecretTap} activeOpacity={1}>
+          <Text
+            style={[styles.distanceText, { color: '#FFFFFF' }]}
+            numberOfLines={1}
+          >
+            {displayDistance}
+          </Text>
+        </TouchableOpacity>
+
         {/* Blurred target name until arrival */}
         <Text
           style={[
@@ -337,7 +330,7 @@ export default function CompassScreen() {
           Choose Another
         </Text>
       </TouchableOpacity>
-      
+
       {/* Distance unit toggle button (bottom right) */}
       <TouchableOpacity
         style={[styles.unitToggleButton, { backgroundColor: '#2C2C2E' }]}
@@ -485,4 +478,3 @@ const styles = StyleSheet.create({
     fontFamily: SORA.Bold,
   },
 });
-
