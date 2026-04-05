@@ -130,7 +130,6 @@ export default function CompassScreen() {
 
   // Register dev-only test handlers
   useEffect(() => {
-    if (!__DEV__) return undefined;
     return registerCompassDevHandlers({
       testArrival: () => {
         setHasArrived(true);
@@ -194,7 +193,6 @@ export default function CompassScreen() {
 
   // Hidden reviewer trigger: 5 taps on distance text within 2 seconds
   const handleSecretTap = () => {
-    if (!__DEV__) return;
 
     const newCount = tapCount + 1;
     setTapCount(newCount);
