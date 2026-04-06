@@ -1,16 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PURCHASE_STATUS_KEY = '@pointme:purchase_status';
-const PURCHASE_PRODUCT_ID = 'unlock_full_app'; // You'll need to create this in App Store Connect and Google Play Console
+const PURCHASE_PRODUCT_ID = '11';
 
-// Dynamically import to handle Expo Go (where native modules aren't available)
-let InAppPurchases: typeof import('expo-in-app-purchases') | null = null;
+let IAP: typeof import('expo-iap') | null = null;
 
 try {
-  InAppPurchases = require('expo-in-app-purchases');
+  IAP = require('expo-iap');
 } catch (error) {
-  // Native module not available (e.g., in Expo Go)
-  console.warn('expo-in-app-purchases not available - running in Expo Go or development mode');
+  console.warn('expo-iap not available - running in Expo Go or development mode');
 }
 
 export interface PurchaseStatus {
@@ -19,117 +17,12 @@ export interface PurchaseStatus {
   transactionId?: string;
 }
 
-// Global purchase listener promise resolvers
-let purchaseResolvers: Array<{
-  resolve: (value: { success: boolean; error?: string }) => void;
-  reject: (error: any) => void;
-}> = [];
+// ─── Storage helpers ──────────────────────────────────────────────────────────
 
-// Set up global purchase listener (should be called once at app startup)
-let isListenerSetup = false;
-
-function setupPurchaseListener() {
-  if (isListenerSetup || !InAppPurchases) return;
-  
-  InAppPurchases.setPurchaseListener(
-    async ({ responseCode, results, errorCode }) => {
-      if (responseCode === InAppPurchases.IAPResponseCode.OK) {
-        // Process all purchases
-        if (results && results.length > 0) {
-          for (const purchase of results) {
-            // Only process unacknowledged purchases
-            if (!purchase.acknowledged && purchase.productId === PURCHASE_PRODUCT_ID) {
-              // Save purchase status
-              await savePurchaseStatus({
-                hasPurchased: true,
-                purchaseDate: purchase.purchaseTime || Date.now(),
-                transactionId: purchase.orderId || purchase.transactionReceipt,
-              });
-
-              // Finish the transaction (false = non-consumable)
-              if (InAppPurchases) {
-                await InAppPurchases.finishTransactionAsync(purchase, false);
-              }
-
-              // Resolve all pending purchase promises
-              purchaseResolvers.forEach(({ resolve }) => {
-                resolve({ success: true });
-              });
-              purchaseResolvers = [];
-              return;
-            }
-          }
-        }
-      } else {
-        // Purchase failed or was cancelled
-        const errorMessage =
-          responseCode === InAppPurchases.IAPResponseCode.USER_CANCELED
-            ? 'Purchase cancelled'
-            : `Purchase failed: ${errorCode || responseCode}`;
-
-        purchaseResolvers.forEach(({ resolve }) => {
-          resolve({ success: false, error: errorMessage });
-        });
-        purchaseResolvers = [];
-      }
-    }
-  );
-  
-  isListenerSetup = true;
-}
-
-/**
- * Initialize the in-app purchase connection
- */
-export async function initializePurchases(): Promise<boolean> {
-  if (!InAppPurchases) {
-    console.warn('In-app purchases not available (Expo Go or development mode)');
-    return false;
-  }
-  
-  try {
-    await InAppPurchases.connectAsync();
-    const responseCode = await InAppPurchases.getBillingResponseCodeAsync();
-    
-    if (responseCode !== InAppPurchases.IAPResponseCode.OK) {
-      console.warn('In-app purchases are not available on this device');
-      return false;
-    }
-
-    // Set up the purchase listener
-    setupPurchaseListener();
-    
-    return true;
-  } catch (error) {
-    console.error('Error initializing purchases:', error);
-    return false;
-  }
-}
-
-/**
- * Disconnect from the purchase service
- */
-export async function disconnectPurchases(): Promise<void> {
-  if (!InAppPurchases) return;
-  
-  try {
-    await InAppPurchases.disconnectAsync();
-    isListenerSetup = false;
-    purchaseResolvers = [];
-  } catch (error) {
-    console.error('Error disconnecting purchases:', error);
-  }
-}
-
-/**
- * Get the purchase status from storage
- */
 export async function getPurchaseStatus(): Promise<PurchaseStatus> {
   try {
     const data = await AsyncStorage.getItem(PURCHASE_STATUS_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
+    if (data) return JSON.parse(data);
     return { hasPurchased: false };
   } catch (error) {
     console.error('Error getting purchase status:', error);
@@ -137,9 +30,6 @@ export async function getPurchaseStatus(): Promise<PurchaseStatus> {
   }
 }
 
-/**
- * Save purchase status to storage
- */
 async function savePurchaseStatus(status: PurchaseStatus): Promise<void> {
   try {
     await AsyncStorage.setItem(PURCHASE_STATUS_KEY, JSON.stringify(status));
@@ -148,66 +38,110 @@ async function savePurchaseStatus(status: PurchaseStatus): Promise<void> {
   }
 }
 
-/**
- * Get available products (for future use if needed)
- */
-export async function getProducts(): Promise<any[]> {
-  if (!InAppPurchases) return [];
-  
+export async function hasPurchasedFullApp(): Promise<boolean> {
+  const status = await getPurchaseStatus();
+  return status.hasPurchased;
+}
+
+// ─── Initialize ───────────────────────────────────────────────────────────────
+
+export async function initializePurchases(): Promise<boolean> {
+  if (!IAP) {
+    console.warn('expo-iap not available');
+    return false;
+  }
+
   try {
-    const { results } = await InAppPurchases.getProductsAsync([PURCHASE_PRODUCT_ID]);
-    return results || [];
+    await IAP.initConnection();
+    return true;
+  } catch (error) {
+    console.error('Error initializing purchases:', error);
+    return false;
+  }
+}
+
+export async function disconnectPurchases(): Promise<void> {
+  if (!IAP) return;
+  try {
+    await IAP.endConnection();
+  } catch (error) {
+    console.error('Error disconnecting purchases:', error);
+  }
+}
+
+// ─── Get products ─────────────────────────────────────────────────────────────
+
+export async function getProducts(): Promise<any[]> {
+  if (!IAP) return [];
+
+  try {
+    const products = await IAP.fetchProducts({ skus: [PURCHASE_PRODUCT_ID] });
+    return products || [];
   } catch (error) {
     console.error('Error getting products:', error);
     return [];
   }
 }
 
-/**
- * Purchase the full app unlock
- */
+// ─── Purchase ─────────────────────────────────────────────────────────────────
+
 export async function purchaseFullApp(): Promise<{
   success: boolean;
   error?: string;
 }> {
-  try {
-    // Check if already purchased
-    const status = await getPurchaseStatus();
-    if (status.hasPurchased) {
-      return { success: true };
-    }
+  if (!IAP) {
+    return {
+      success: false,
+      error: 'In-app purchases not available',
+    };
+  }
 
-    // Initialize if not already connected
+  try {
+    // Already purchased — no need to buy again
+    const status = await getPurchaseStatus();
+    if (status.hasPurchased) return { success: true };
+
     await initializePurchases();
 
-    // Set up purchase listener if not already set
-    setupPurchaseListener();
-
-    // Create a promise that will be resolved by the purchase listener
-    return new Promise((resolve, reject) => {
-      // Add resolver to the queue
-      purchaseResolvers.push({ resolve, reject });
-
-      // Initiate the purchase
-      if (!InAppPurchases) {
-        resolve({
-          success: false,
-          error: 'In-app purchases not available (Expo Go or development mode)',
-        });
-        return;
-      }
-      
-      InAppPurchases.purchaseItemAsync(PURCHASE_PRODUCT_ID).catch((error) => {
-        // Remove this resolver from the queue
-        purchaseResolvers = purchaseResolvers.filter((r) => r.resolve !== resolve);
-        resolve({
-          success: false,
-          error: error?.message || 'Failed to initiate purchase',
-        });
-      });
+    const purchase = await IAP.requestPurchase({
+      request: {
+        apple: { sku: PURCHASE_PRODUCT_ID },
+        google: { skus: [PURCHASE_PRODUCT_ID] },
+      },
+      type: 'in-app',
     });
+
+    if (!purchase) {
+      return { success: false, error: 'Purchase failed. Please try again.' };
+    }
+
+    // Finish the transaction — expo-iap expects a single Purchase not an array
+    const singlePurchase = Array.isArray(purchase) ? purchase[0] : purchase;
+    await IAP.finishTransaction({ purchase: singlePurchase, isConsumable: false });
+
+    // Save locally
+    await savePurchaseStatus({
+      hasPurchased: true,
+      purchaseDate: Date.now(),
+      transactionId:
+        (singlePurchase as any).transactionId ||
+        (singlePurchase as any).orderId ||
+        (singlePurchase as any).transactionReceipt ||
+        'unknown',
+    });
+
+    return { success: true };
   } catch (error: any) {
     console.error('Error purchasing:', error);
+
+    // User cancelled — don't show error
+    if (
+      error?.code === 'E_USER_CANCELLED' ||
+      error?.message?.toLowerCase().includes('cancel')
+    ) {
+      return { success: false, error: 'Purchase cancelled' };
+    }
+
     return {
       success: false,
       error: error?.message || 'Unknown error occurred',
@@ -215,45 +149,43 @@ export async function purchaseFullApp(): Promise<{
   }
 }
 
-/**
- * Restore previous purchases (for when user reinstalls app or uses on new device)
- */
+// ─── Restore ──────────────────────────────────────────────────────────────────
+
 export async function restorePurchases(): Promise<{
   success: boolean;
   restored: boolean;
   error?: string;
 }> {
-  if (!InAppPurchases) {
+  if (!IAP) {
     return {
       success: false,
       restored: false,
-      error: 'In-app purchases not available (Expo Go or development mode)',
+      error: 'In-app purchases not available',
     };
   }
-  
+
   try {
     await initializePurchases();
 
-    // Check current purchase status first
+    // Already stored locally
     const currentStatus = await getPurchaseStatus();
-    if (currentStatus.hasPurchased) {
-      return { success: true, restored: false };
-    }
+    if (currentStatus.hasPurchased) return { success: true, restored: true };
 
-    // Get purchase history
-    const { results } = await InAppPurchases.getPurchaseHistoryAsync();
-    
-    if (results && results.length > 0) {
-      // Check if any purchase matches our product ID
-      const validPurchase = results.find(
-        (purchase) => purchase.productId === PURCHASE_PRODUCT_ID
+    const purchases = await IAP.getAvailablePurchases();
+
+    if (purchases && purchases.length > 0) {
+      const valid = purchases.find(
+        (p: any) => p.productId === PURCHASE_PRODUCT_ID
       );
 
-      if (validPurchase) {
+      if (valid) {
         await savePurchaseStatus({
           hasPurchased: true,
-          purchaseDate: validPurchase.purchaseTime || Date.now(),
-          transactionId: validPurchase.orderId || validPurchase.transactionReceipt,
+          purchaseDate: (valid as any).transactionDate || Date.now(),
+          transactionId:
+            (valid as any).transactionId ||
+            (valid as any).orderId ||
+            'restored',
         });
         return { success: true, restored: true };
       }
@@ -270,36 +202,22 @@ export async function restorePurchases(): Promise<{
   }
 }
 
-/**
- * Check if user has purchased the full app
- */
-export async function hasPurchasedFullApp(): Promise<boolean> {
-  const status = await getPurchaseStatus();
-  return status.hasPurchased;
-}
+// ─── Debug helpers (dev only) ─────────────────────────────────────────────────
 
-/**
- * Debug function to toggle purchase status (dev only)
- */
 export async function togglePurchaseStatusDebug(): Promise<boolean> {
   if (!__DEV__) {
     throw new Error('This function is only available in development mode');
   }
-  
   const currentStatus = await getPurchaseStatus();
   const newStatus: PurchaseStatus = {
     hasPurchased: !currentStatus.hasPurchased,
     purchaseDate: !currentStatus.hasPurchased ? Date.now() : undefined,
     transactionId: !currentStatus.hasPurchased ? 'debug-transaction-id' : undefined,
   };
-  
   await savePurchaseStatus(newStatus);
   return newStatus.hasPurchased;
 }
 
-/**
- * Debug function to set purchase status directly (dev only)
- */
 export async function setPurchaseStatusDebug(hasPurchased: boolean): Promise<void> {
   if (!__DEV__) {
     throw new Error('This function is only available in development mode');
