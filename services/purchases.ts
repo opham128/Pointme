@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PURCHASE_STATUS_KEY = '@pointme:purchase_status';
-const PURCHASE_PRODUCT_ID = '11';
+const PURCHASE_PRODUCT_ID = 'com.pointme.paywall'; // your current ID
 
 let IAP: typeof import('expo-iap') | null = null;
 
@@ -25,7 +25,7 @@ export async function getPurchaseStatus(): Promise<PurchaseStatus> {
     if (data) return JSON.parse(data);
     return { hasPurchased: false };
   } catch (error) {
-    console.error('Error getting purchase status:', error);
+    console.error('❌ Error getting purchase status:', error);
     return { hasPurchased: false };
   }
 }
@@ -34,7 +34,7 @@ async function savePurchaseStatus(status: PurchaseStatus): Promise<void> {
   try {
     await AsyncStorage.setItem(PURCHASE_STATUS_KEY, JSON.stringify(status));
   } catch (error) {
-    console.error('Error saving purchase status:', error);
+    console.error('❌ Error saving purchase status:', error);
   }
 }
 
@@ -47,15 +47,35 @@ export async function hasPurchasedFullApp(): Promise<boolean> {
 
 export async function initializePurchases(): Promise<boolean> {
   if (!IAP) {
-    console.warn('expo-iap not available');
+    console.warn('⚠️ expo-iap not available');
     return false;
   }
 
   try {
+    console.log('🔌 Initializing IAP...');
     await IAP.initConnection();
+
+    // OPTIONAL: Uncomment for deeper debugging
+    /*
+    IAP.setPurchaseListener(async (result) => {
+      console.log('📥 Purchase listener result:', result);
+
+      if (result.responseCode === IAP.IAPResponseCode.OK) {
+        const purchase = result.results?.[0];
+        if (purchase) {
+          console.log('✅ Finishing transaction from listener');
+          await IAP.finishTransaction({
+            purchase,
+            isConsumable: false,
+          });
+        }
+      }
+    });
+    */
+
     return true;
   } catch (error) {
-    console.error('Error initializing purchases:', error);
+    console.error('❌ Error initializing purchases:', error);
     return false;
   }
 }
@@ -65,7 +85,7 @@ export async function disconnectPurchases(): Promise<void> {
   try {
     await IAP.endConnection();
   } catch (error) {
-    console.error('Error disconnecting purchases:', error);
+    console.error('❌ Error disconnecting purchases:', error);
   }
 }
 
@@ -75,10 +95,21 @@ export async function getProducts(): Promise<any[]> {
   if (!IAP) return [];
 
   try {
-    const products = await IAP.fetchProducts({ skus: [PURCHASE_PRODUCT_ID] });
+    console.log('🛒 Fetching products for:', PURCHASE_PRODUCT_ID);
+
+    const products = await IAP.fetchProducts({
+      skus: [PURCHASE_PRODUCT_ID],
+    });
+
+    console.log('📦 Products returned:', JSON.stringify(products, null, 2));
+
+    if (!products || products.length === 0) {
+      console.warn('⚠️ No products found → App Store config issue');
+    }
+
     return products || [];
   } catch (error) {
-    console.error('Error getting products:', error);
+    console.error('❌ Error getting products:', error);
     return [];
   }
 }
@@ -97,11 +128,15 @@ export async function purchaseFullApp(): Promise<{
   }
 
   try {
-    // Already purchased — no need to buy again
     const status = await getPurchaseStatus();
-    if (status.hasPurchased) return { success: true };
+    if (status.hasPurchased) {
+      console.log('✅ Already purchased');
+      return { success: true };
+    }
 
     await initializePurchases();
+
+    console.log('💳 Attempting purchase for:', PURCHASE_PRODUCT_ID);
 
     const purchase = await IAP.requestPurchase({
       request: {
@@ -111,15 +146,22 @@ export async function purchaseFullApp(): Promise<{
       type: 'in-app',
     });
 
+    console.log('📥 Raw purchase response:', purchase);
+
     if (!purchase) {
       return { success: false, error: 'Purchase failed. Please try again.' };
     }
 
-    // Finish the transaction — expo-iap expects a single Purchase not an array
     const singlePurchase = Array.isArray(purchase) ? purchase[0] : purchase;
-    await IAP.finishTransaction({ purchase: singlePurchase, isConsumable: false });
 
-    // Save locally
+    console.log('📦 Parsed purchase:', singlePurchase);
+
+    console.log('✅ Finishing transaction...');
+    await IAP.finishTransaction({
+      purchase: singlePurchase,
+      isConsumable: false,
+    });
+
     await savePurchaseStatus({
       hasPurchased: true,
       purchaseDate: Date.now(),
@@ -130,15 +172,17 @@ export async function purchaseFullApp(): Promise<{
         'unknown',
     });
 
+    console.log('🎉 Purchase successful and saved locally');
+
     return { success: true };
   } catch (error: any) {
-    console.error('Error purchasing:', error);
+    console.error('❌ Error purchasing:', error);
 
-    // User cancelled — don't show error
     if (
       error?.code === 'E_USER_CANCELLED' ||
       error?.message?.toLowerCase().includes('cancel')
     ) {
+      console.log('🚫 User cancelled purchase');
       return { success: false, error: 'Purchase cancelled' };
     }
 
@@ -167,11 +211,16 @@ export async function restorePurchases(): Promise<{
   try {
     await initializePurchases();
 
-    // Already stored locally
     const currentStatus = await getPurchaseStatus();
-    if (currentStatus.hasPurchased) return { success: true, restored: true };
+    if (currentStatus.hasPurchased) {
+      console.log('✅ Already restored locally');
+      return { success: true, restored: true };
+    }
 
+    console.log('🔄 Fetching available purchases...');
     const purchases = await IAP.getAvailablePurchases();
+
+    console.log('📦 Available purchases:', JSON.stringify(purchases, null, 2));
 
     if (purchases && purchases.length > 0) {
       const valid = purchases.find(
@@ -179,6 +228,8 @@ export async function restorePurchases(): Promise<{
       );
 
       if (valid) {
+        console.log('✅ Found valid purchase to restore');
+
         await savePurchaseStatus({
           hasPurchased: true,
           purchaseDate: (valid as any).transactionDate || Date.now(),
@@ -187,13 +238,15 @@ export async function restorePurchases(): Promise<{
             (valid as any).orderId ||
             'restored',
         });
+
         return { success: true, restored: true };
       }
     }
 
+    console.warn('⚠️ No purchases found to restore');
     return { success: true, restored: false };
   } catch (error: any) {
-    console.error('Error restoring purchases:', error);
+    console.error('❌ Error restoring purchases:', error);
     return {
       success: false,
       restored: false,
