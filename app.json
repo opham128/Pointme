@@ -65,7 +65,8 @@
         }
       ],
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "expo-iap"
     ],
     "scheme": "pointme",
     "extra": {
