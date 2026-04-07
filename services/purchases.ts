@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PURCHASE_STATUS_KEY = '@pointme:purchase_status';
-const PURCHASE_PRODUCT_ID = 'com.pointme.paywall'; // your current ID
+const PURCHASE_PRODUCT_ID = 'com.pointme.paywall';
 
 let IAP: typeof import('expo-iap') | null = null;
 
@@ -54,25 +54,6 @@ export async function initializePurchases(): Promise<boolean> {
   try {
     console.log('🔌 Initializing IAP...');
     await IAP.initConnection();
-
-    // OPTIONAL: Uncomment for deeper debugging
-    /*
-    IAP.setPurchaseListener(async (result) => {
-      console.log('📥 Purchase listener result:', result);
-
-      if (result.responseCode === IAP.IAPResponseCode.OK) {
-        const purchase = result.results?.[0];
-        if (purchase) {
-          console.log('✅ Finishing transaction from listener');
-          await IAP.finishTransaction({
-            purchase,
-            isConsumable: false,
-          });
-        }
-      }
-    });
-    */
-
     return true;
   } catch (error) {
     console.error('❌ Error initializing purchases:', error);
@@ -138,13 +119,8 @@ export async function purchaseFullApp(): Promise<{
 
     console.log('💳 Attempting purchase for:', PURCHASE_PRODUCT_ID);
 
-    const purchase = await IAP.requestPurchase({
-      request: {
-        apple: { sku: PURCHASE_PRODUCT_ID },
-        google: { skus: [PURCHASE_PRODUCT_ID] },
-      },
-      type: 'in-app',
-    });
+    // Cast to any to bypass TypeScript — actual runtime signature for expo-iap 3.x
+    const purchase = await (IAP as any).requestPurchase(PURCHASE_PRODUCT_ID);
 
     console.log('📥 Raw purchase response:', purchase);
 
@@ -156,11 +132,8 @@ export async function purchaseFullApp(): Promise<{
 
     console.log('📦 Parsed purchase:', singlePurchase);
 
-    console.log('✅ Finishing transaction...');
-    await IAP.finishTransaction({
-      purchase: singlePurchase,
-      isConsumable: false,
-    });
+    // finishTransaction in 3.x takes (purchase, isConsumable) directly
+    await (IAP as any).finishTransaction(singlePurchase, false);
 
     await savePurchaseStatus({
       hasPurchased: true,

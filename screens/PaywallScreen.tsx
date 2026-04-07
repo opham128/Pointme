@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../context/AppContext';
-import { purchaseFullApp, restorePurchases, initializePurchases, getProducts } from '../services/purchases';
+import { purchaseFullApp, restorePurchases, initializePurchases, getProductsList as getProducts } from '../services/purchases';
 import { PURCHASE_PRICE } from '../constants';
 import { SORA } from '../constants/fonts';
 import Animated, {
@@ -56,8 +56,8 @@ export default function PaywallScreen() {
         // Get products to retrieve localized price
         const products = await getProducts();
         if (products && products.length > 0 && products[0].price) {
-          // products[0].price is already localized (e.g., "$1.99", "€1.89", "¥299")
-          setLocalizedPrice(products[0].price);
+          const raw = parseFloat(products[0].price);
+          setLocalizedPrice(isNaN(raw) ? products[0].price : `$${raw.toFixed(2)}`);
         } else {
           // Fallback to hardcoded price if product info not available
           setLocalizedPrice(`$${PURCHASE_PRICE.toFixed(2)}`);
@@ -80,7 +80,7 @@ export default function PaywallScreen() {
 
   const handlePurchase = async () => {
     if (!isInitialized) {
-      setError('Purchases are not available. Please try again later.');
+      setError('Purchases not available. Please try again later.');
       return;
     }
 
