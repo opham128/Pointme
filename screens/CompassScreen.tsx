@@ -32,10 +32,14 @@ import { SORA } from '../constants/fonts';
 export default function CompassScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
-  const { selectedCategory, userLocation, setTargetPlace, arrivalCount, hasPurchased } = useAppContext();
+  const { selectedCategory, userLocation, setTargetPlace, arrivalCount, hasPurchased, manualLocation } = useAppContext();
   const heading = useHeading(true);
-  const { place, loading, error, refetch } = useNearestPlace(userLocation, selectedCategory, !!userLocation);
-  const { distanceFeet, distanceMiles } = useDistance(userLocation, place?.location || null);
+  
+  // Use manual location as fallback if GPS location is not available
+  const effectiveLocation = userLocation || manualLocation;
+  
+  const { place, loading, error, refetch } = useNearestPlace(effectiveLocation, selectedCategory, !!effectiveLocation);
+  const { distanceFeet, distanceMiles } = useDistance(effectiveLocation, place?.location || null);
   const isOnline = useNetworkStatus();
   const [hasArrived, setHasArrived] = useState(false);
   const hasAlignedRef = useRef(false);
@@ -141,9 +145,9 @@ export default function CompassScreen() {
   }, [router]);
 
   const bearing = useMemo(() => {
-    if (!userLocation || !place) return 0;
-    return calculateBearing(userLocation, place.location);
-  }, [userLocation?.latitude, userLocation?.longitude, place?.location.latitude, place?.location.longitude]);
+    if (!effectiveLocation || !place) return 0;
+    return calculateBearing(effectiveLocation, place.location);
+  }, [effectiveLocation?.latitude, effectiveLocation?.longitude, place?.location.latitude, place?.location.longitude]);
 
   const rotation = useMemo(() => {
     if (!place) return 0;

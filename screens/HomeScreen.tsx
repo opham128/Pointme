@@ -8,6 +8,9 @@ import {
   TouchableOpacity,
   Share,
   Linking,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -20,7 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { Category } from '../types';
+import { Category, Location } from '../types';
 import { CATEGORIES, FREE_LOCATIONS_LIMIT } from '../constants';
 import { CategoryButton } from '../components/CategoryButton';
 import { useAppContext } from '../context/AppContext';
@@ -29,6 +32,7 @@ import { clearAllStorage } from '../services/storage';
 import { togglePurchaseStatusDebug } from '../services/purchases';
 import { RESTAURANT_CUISINES } from '../constants';
 import { SORA } from '../constants/fonts';
+import { geocodeLocation } from '../services/geocoding';
 
 const ACCENT_COLOR = '#007AFF';
 const BORDER = '#242424';
@@ -37,16 +41,22 @@ const WHITE  = '#F0EDE6';
 export default function HomeScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
-  const { setSelectedCategory, requestSearch, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences, userLocation: contextLocation } = useAppContext();
+  const { setSelectedCategory, requestSearch, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences, userLocation: contextLocation, manualLocation, setManualLocation } = useAppContext();
   const { location, loading, error, permissionGranted, requestPermission } = useLocation();
   
   // Use location from context immediately if available (prevents long loading when navigating back)
-  const effectiveLocation = location || contextLocation;
+  // Fall back to manual location if GPS is not available
+  const effectiveLocation = location || contextLocation || manualLocation;
   
   // Category filtering state (for paid users) - reset each time, not saved
   const [restaurantCuisine, setRestaurantCuisine] = useState<string | null>(null);
   const [expandedCategory, setExpandedCategory] = useState<Category | null>(null);
 
+  // Manual location search state (when GPS permission denied)
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchLoading, setSearchLoading] = useState<boolean>(false);
+  const [searchError, setSearchError] = useState<string>('');
+  const [showLocationSearch, setShowLocationSearch] = useState<boolean>(false);
   
   // Animation values
   const titleOpacity = useSharedValue(0);
@@ -132,6 +142,38 @@ export default function HomeScreen() {
     }
   };
 
+  // Handle "Locate Me" button press - only request permission when user explicitly presses button
+  const handleLocateMe = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await requestPermission();
+  };
+
+  // Handle manual location search
+  const handleLocationSearch = async () => {
+    if (!searchQuery.trim()) {
+      setSearchError('Please enter a city, zip code, or address');
+      return;
+    }
+
+    setSearchLoading(true);
+    setSearchError('');
+
+    try {
+      const result = await geocodeLocation(searchQuery);
+      setManualLocation(result);
+      setShowLocationSearch(false);
+      setSearchQuery('');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Show success feedback
+      alert(`Location set to: ${searchQuery}\nYou can now search for places!`);
+    } catch (err: any) {
+      setSearchError(err.message || 'Failed to find location');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
   const handleInviteFriend = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
@@ -194,7 +236,7 @@ export default function HomeScreen() {
   }));
 
   // Only show loading if we don't have location from context either
-  if (loading && !contextLocation) {
+  if (loading && !contextLocation && !manualLocation) {
     return (
       <View style={[styles.container, { backgroundColor: '#000000' }]}>
         <ActivityIndicator size="large" color="#FFFFFF" />
@@ -205,23 +247,101 @@ export default function HomeScreen() {
     );
   }
 
-  if (error || !permissionGranted) {
+  // Show location search UI if GPS permission not granted and no manual location set
+  if (!permissionGranted && !location && !manualLocation) {
+    return (
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={[styles.container, { backgroundColor: '#000000' }]}
+      >
+        <View style={styles.container}>
+          <Text style={[styles.errorTitle, { color: '#FFFFFF', marginTop: 40 }]}>
+            📍 Set Your Location
+          </Text>
+          <Text style={[styles.errorText, { color: '#8E8E93', marginBottom: 30 }]}>
+            Choose how to search for places
+          </Text>
+
+          {/* Manual Location Search */}
+          <View style={[styles.locationSearchContainer, { backgroundColor: '#1C1C1E' }]}>
+            <Text style={[styles.locationSearchLabel, { color: '#FFFFFF' }]}>
+              🔍 Search by City or Zip Code
+            </Text>
+            <TextInput
+              style={[styles.locationSearchInput, { color: '#FFFFFF', borderColor: searchError ? '#FF3B30' : '#3A3A3C' }]}
+              placeholder="e.g., San Francisco, 90210"
+              placeholderTextColor="#8E8E93"
+              value={searchQuery}
+              onChangeText={(text) => {
+                setSearchQuery(text);
+                setSearchError('');
+              }}
+              editable={!searchLoading}
+            />
+            {searchError ? (
+              <Text style={[styles.errorMessage, { color: '#FF3B30' }]}>{searchError}</Text>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.permissionButton, { backgroundColor: '#007AFF', marginTop: 12 }]}
+              onPress={handleLocationSearch}
+              disabled={searchLoading}
+              activeOpacity={0.8}
+            >
+              {searchLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.permissionButtonText}>Find Location</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Divider */}
+          <View style={[styles.divider, { backgroundColor: '#3A3A3C' }]} />
+
+          {/* GPS Location */}
+          <View style={styles.locationOptionContainer}>
+            <Text style={[styles.locationSearchLabel, { color: '#FFFFFF', marginBottom: 12 }]}>
+              📡 Use GPS
+            </Text>
+            <Text style={[styles.locationSearchDescription, { color: '#8E8E93' }]}>
+              Enable location services for precise navigation to nearby places
+            </Text>
+            <TouchableOpacity
+              style={[styles.permissionButton, { backgroundColor: '#30B0C0', marginTop: 12 }]}
+              onPress={handleLocateMe}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.permissionButtonText}>Locate Me</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Info Text */}
+          <Text style={[styles.infoText, { color: '#8E8E93', marginTop: 30 }]}>
+            Manual location search works for initial searches. You can enable GPS later for real-time compass navigation.
+          </Text>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // Show error if there's a location error (for actual technical issues)
+  if (error && !manualLocation) {
     const openAppSettings = () => Linking.openSettings();
 
     return (
       <View style={[styles.container, { backgroundColor: '#000000' }]}>
         <Text style={[styles.errorTitle, { color: '#FFFFFF' }]}>
-          Location Permission Required
+          Location Error
         </Text>
         <Text style={[styles.errorText, { color: '#8E8E93' }]}>
-          {error?.message || 'We need your location to find nearby places.'}
+          {error?.message || 'Failed to access location.'}
         </Text>
         <TouchableOpacity
           style={[styles.permissionButton, { backgroundColor: '#007AFF' }]}
-          onPress={() => requestPermission()}
+          onPress={handleLocateMe}
           activeOpacity={0.8}
         >
-          <Text style={styles.permissionButtonText}>Grant permission</Text>
+          <Text style={styles.permissionButtonText}>Try Again</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.permissionButton, styles.permissionButtonSecondary]}
@@ -232,9 +352,6 @@ export default function HomeScreen() {
             Open Settings
           </Text>
         </TouchableOpacity>
-        <Text style={[styles.retryText, { color: '#8E8E93' }]}>
-          If you denied access, open Settings and enable Location for Point Me.
-        </Text>
       </View>
     );
   }
@@ -255,7 +372,7 @@ export default function HomeScreen() {
               titleAnimatedStyle
             ]}
           >
-            Point Me
+            Point M
           </Animated.Text>
         </TouchableOpacity>
         <Animated.View style={pinAnimatedStyle}>
@@ -569,5 +686,53 @@ const styles = StyleSheet.create({
   debugButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  
+  // Location search styles
+  locationSearchContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#3A3A3C',
+  },
+  locationSearchLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: SORA.SemiBold,
+    marginBottom: 12,
+  },
+  locationSearchDescription: {
+    fontSize: 14,
+    fontFamily: SORA.Regular,
+    lineHeight: 21,
+  },
+  locationSearchInput: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    fontSize: 16,
+    fontFamily: SORA.Regular,
+  },
+  errorMessage: {
+    fontSize: 13,
+    fontFamily: SORA.Regular,
+    marginTop: 8,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 24,
+  },
+  locationOptionContainer: {
+    marginBottom: 20,
+  },
+  infoText: {
+    fontSize: 13,
+    fontFamily: SORA.Regular,
+    textAlign: 'center',
+    lineHeight: 19,
+    paddingHorizontal: 10,
   },
 });

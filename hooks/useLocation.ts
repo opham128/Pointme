@@ -6,7 +6,10 @@ import { Location as LocationType } from '../types';
  * Hook to get and track user's current location
  * Handles permission requests and location updates
  * 
- * @param enabled Whether to actively track location
+ * IMPORTANT: This hook does NOT request permission on mount.
+ * Call requestPermission() when the user presses "Locate Me" button.
+ * 
+ * @param enabled Whether to actively track location (watches for updates if permission already granted)
  * @returns User location, loading state, error, and permission status
  */
 export function useLocation(enabled: boolean = true): {
@@ -17,11 +20,14 @@ export function useLocation(enabled: boolean = true): {
   requestPermission: () => Promise<void>;
 } {
   const [location, setLocation] = useState<LocationType | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false); // Start as false (not loading)
   const [error, setError] = useState<Error | null>(null);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
 
   const requestPermission = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
@@ -53,6 +59,7 @@ export function useLocation(enabled: boolean = true): {
           longitude: currentLocation.coords.longitude,
         });
         setError(null);
+        setLoading(false);
       } else {
         setPermissionGranted(false);
         setError(new Error('Location permission denied'));
@@ -66,31 +73,29 @@ export function useLocation(enabled: boolean = true): {
     }
   };
 
+  // Only watch location if enabled AND permission is already granted
+  // Does NOT auto-request permission
   useEffect(() => {
-    if (!enabled) return;
-
-    requestPermission();
+    if (!enabled || !permissionGranted) return;
 
     // Watch for location updates
     let subscription: Location.LocationSubscription | null = null;
 
     const watchLocation = async () => {
-      if (permissionGranted) {
-        subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.BestForNavigation,
-            timeInterval: 1000, // Update every second
-            distanceInterval: 16, // Update every 16 feet (approximately 5 meters)
-          },
-          (newLocation) => {
-            setLocation({
-              latitude: newLocation.coords.latitude,
-              longitude: newLocation.coords.longitude,
-            });
-            setError(null);
-          }
-        );
-      }
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 1000, // Update every second
+          distanceInterval: 16, // Update every 16 feet (approximately 5 meters)
+        },
+        (newLocation) => {
+          setLocation({
+            latitude: newLocation.coords.latitude,
+            longitude: newLocation.coords.longitude,
+          });
+          setError(null);
+        }
+      );
     };
 
     watchLocation();
