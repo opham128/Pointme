@@ -24,6 +24,42 @@ export function useLocation(enabled: boolean = true): {
   const [error, setError] = useState<Error | null>(null);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
 
+  // Check if permission is already granted on mount
+  useEffect(() => {
+    let isMounted = true;
+    const checkExistingPermission = async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (isMounted) {
+          if (status === 'granted') {
+            setPermissionGranted(true);
+            // Try to get initial location if permission already granted
+            try {
+              const currentLocation = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+              if (isMounted) {
+                setLocation({
+                  latitude: currentLocation.coords.latitude,
+                  longitude: currentLocation.coords.longitude,
+                });
+              }
+            } catch (err) {
+              console.log('Failed to get initial location:', err);
+            }
+          }
+        }
+      } catch (err) {
+        console.log('Failed to check permission status:', err);
+      }
+    };
+
+    checkExistingPermission();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const requestPermission = async () => {
     setLoading(true);
     setError(null);
