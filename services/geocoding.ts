@@ -1,29 +1,11 @@
 import { Location } from '../types';
-import { Platform } from 'react-native';
-import { 
-  GOOGLE_PLACES_API_KEY as ENV_API_KEY,
-  // @ts-ignore - Platform-specific keys may not be in .env during development
-  GOOGLE_PLACES_API_KEY_IOS,
-  // @ts-ignore - Platform-specific keys may not be in .env during development
-  GOOGLE_PLACES_API_KEY_ANDROID,
-} from '@env';
+import { EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN as ENV_TOKEN } from '@env';
 
-// Get API key based on platform (same pattern as googlePlaces.ts)
-const getApiKey = (): string => {
-  if (Platform.OS === 'ios' && GOOGLE_PLACES_API_KEY_IOS) {
-    return GOOGLE_PLACES_API_KEY_IOS;
-  }
-  if (Platform.OS === 'android' && GOOGLE_PLACES_API_KEY_ANDROID) {
-    return GOOGLE_PLACES_API_KEY_ANDROID;
-  }
-  return ENV_API_KEY || '';
-};
-
-const GOOGLE_PLACES_API_KEY = getApiKey();
+const MAPBOX_ACCESS_TOKEN = ENV_TOKEN || '';
 
 /**
  * Convert a city/zip code or address string to geographic coordinates
- * Uses Google Geocoding API
+ * Uses Mapbox Geocoding API
  * 
  * @param query City name, zip code, or address string (e.g., "San Francisco, CA" or "90210")
  * @returns Location with latitude and longitude, or null if not found
@@ -33,12 +15,12 @@ export async function geocodeLocation(query: string): Promise<Location | null> {
     throw new Error('Please enter a city, zip code, or address');
   }
 
-  if (!GOOGLE_PLACES_API_KEY) {
-    throw new Error('Google Places API key is not configured. Please set GOOGLE_PLACES_API_KEY in your .env file.');
+  if (!MAPBOX_ACCESS_TOKEN) {
+    throw new Error('Mapbox API key is not configured. Please set EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN in your .env file.');
   }
 
   try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${GOOGLE_PLACES_API_KEY}`;
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?limit=1&access_token=${MAPBOX_ACCESS_TOKEN}`;
     
     const response = await fetch(url);
 
@@ -48,25 +30,21 @@ export async function geocodeLocation(query: string): Promise<Location | null> {
 
     const data = await response.json();
 
-    if (data.status === 'OK' && data.results && data.results.length > 0) {
-      const result = data.results[0];
-      const location = result.geometry.location;
+    if (data.features && data.features.length > 0) {
+      const feature = data.features[0];
+      const [longitude, latitude] = feature.geometry.coordinates;
 
       return {
-        latitude: location.lat,
-        longitude: location.lng,
+        latitude,
+        longitude,
       };
-    } else if (data.status === 'ZERO_RESULTS') {
-      throw new Error(`Location not found: "${query}". Try a different city name or zip code.`);
-    } else if (data.status === 'REQUEST_DENIED') {
-      throw new Error('Geocoding service is not available. Please check your API key.');
     } else {
-      throw new Error(`Geocoding error: ${data.status}`);
+      throw new Error(`Location not found: "${query}". Try a different city name or zip code.`);
     }
   } catch (error: any) {
     // Re-throw custom errors
     if (error.message?.includes('Location not found') || 
-        error.message?.includes('Geocoding service') ||
+        error.message?.includes('Mapbox API key') ||
         error.message?.includes('Please enter')) {
       throw error;
     }

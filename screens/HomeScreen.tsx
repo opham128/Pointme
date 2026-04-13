@@ -247,7 +247,9 @@ export default function HomeScreen() {
     );
   }
 
-  // Show location search UI if GPS permission not granted and no manual location set
+  // Show location setup page ONLY if:
+  // 1. Permission is NOT granted
+  // 2. AND location is not available from other sources
   if (!permissionGranted && !location && !manualLocation) {
     return (
       <KeyboardAvoidingView 
@@ -255,17 +257,40 @@ export default function HomeScreen() {
         style={[styles.container, { backgroundColor: '#000000' }]}
       >
         <View style={styles.container}>
-          <Text style={[styles.errorTitle, { color: '#FFFFFF', marginTop: 40 }]}>
+          <Text style={[styles.errorTitle, { color: '#FFFFFF', marginTop: 80 }]}>
             📍 Set Your Location
           </Text>
           <Text style={[styles.errorText, { color: '#8E8E93', marginBottom: 30 }]}>
             Choose how to search for places
           </Text>
 
+          {/* GPS Location (Top/Preferred) */}
+          <View style={[styles.locationOptionContainer, { marginBottom: 30 }]}>
+            <Text style={[styles.locationSearchLabel, { color: '#FFFFFF', marginBottom: 12 }]}>
+              📡 Use GPS (Recommended)
+            </Text>
+            <Text style={[styles.locationSearchDescription, { color: '#8E8E93' }]}>
+              Enable real-time location for precise navigation to nearby places
+            </Text>
+            <TouchableOpacity
+              style={[styles.permissionButton, { backgroundColor: '#30B0C0', marginTop: 12 }]}
+              onPress={handleLocateMe}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.permissionButtonText}>Locate Me</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Divider */}
+          <View style={[styles.divider, { backgroundColor: '#3A3A3C' }]} />
+
           {/* Manual Location Search */}
-          <View style={[styles.locationSearchContainer, { backgroundColor: '#1C1C1E' }]}>
+          <View style={[styles.locationSearchContainer, { backgroundColor: '#1C1C1E', marginTop: 30 }]}>
             <Text style={[styles.locationSearchLabel, { color: '#FFFFFF' }]}>
               🔍 Search by City or Zip Code
+            </Text>
+            <Text style={[styles.locationSearchDescription, { color: '#8E8E93', marginBottom: 12 }]}>
+              Search for places without GPS
             </Text>
             <TextInput
               style={[styles.locationSearchInput, { color: '#FFFFFF', borderColor: searchError ? '#FF3B30' : '#3A3A3C' }]}
@@ -295,29 +320,9 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Divider */}
-          <View style={[styles.divider, { backgroundColor: '#3A3A3C' }]} />
-
-          {/* GPS Location */}
-          <View style={styles.locationOptionContainer}>
-            <Text style={[styles.locationSearchLabel, { color: '#FFFFFF', marginBottom: 12 }]}>
-              📡 Use GPS
-            </Text>
-            <Text style={[styles.locationSearchDescription, { color: '#8E8E93' }]}>
-              Enable location services for precise navigation to nearby places
-            </Text>
-            <TouchableOpacity
-              style={[styles.permissionButton, { backgroundColor: '#30B0C0', marginTop: 12 }]}
-              onPress={handleLocateMe}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.permissionButtonText}>Locate Me</Text>
-            </TouchableOpacity>
-          </View>
-
           {/* Info Text */}
-          <Text style={[styles.infoText, { color: '#8E8E93', marginTop: 30 }]}>
-            Manual location search works for initial searches. You can enable GPS later for real-time compass navigation.
+          <Text style={[styles.infoText, { color: '#8E8E93', marginTop: 40 }]}>
+            GPS is recommended for the best compass navigation experience. Manual location search works for initial searches.
           </Text>
         </View>
       </KeyboardAvoidingView>
@@ -372,7 +377,7 @@ export default function HomeScreen() {
               titleAnimatedStyle
             ]}
           >
-            Point M
+            Point Me
           </Animated.Text>
         </TouchableOpacity>
         <Animated.View style={pinAnimatedStyle}>
