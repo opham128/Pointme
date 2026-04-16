@@ -275,6 +275,7 @@ export default function HomeScreen() {
       const result = await Share.share({
         message: 'Point yourself towards the nearest bar 🍺',
         title: 'Point Me: Random Bar Compass',
+        url: 'https://apps.apple.com/us/app/pointme-random-bar-compass/id6761635879',
       });
     } catch (error) {
       console.error('Error sharing:', error);
