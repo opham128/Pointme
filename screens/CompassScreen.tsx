@@ -34,21 +34,20 @@ export default function CompassScreen() {
   const router = useRouter();
   const { selectedCategory, userLocation, setTargetPlace, arrivalCount, hasPurchased, manualLocation } = useAppContext();
   const heading = useHeading(true);
-  
+
   // Use manual location as fallback if GPS location is not available
   const effectiveLocation = userLocation || manualLocation;
-  
+
   const { place, loading, error, refetch } = useNearestPlace(effectiveLocation, selectedCategory, !!effectiveLocation);
   const { distanceFeet, distanceMiles } = useDistance(effectiveLocation, place?.location || null);
   const isOnline = useNetworkStatus();
   const [hasArrived, setHasArrived] = useState(false);
+  const [showLocationName, setShowLocationName] = useState(false);
+  const [tapCount, setTapCount] = useState(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAlignedRef = useRef(false);
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('feet');
   const lastHapticTimeRef = useRef<number>(0);
-
-  // Hidden reviewer tap state
-  const [tapCount, setTapCount] = useState(0);
-  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Pulsing glow animation for when close
   const pulseScale = useSharedValue(1);
@@ -96,9 +95,9 @@ export default function CompassScreen() {
     );
 
     const playHeartbeat = () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       setTimeout(() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       }, 120);
     };
     playHeartbeat();
@@ -114,7 +113,7 @@ export default function CompassScreen() {
     }
   }, [place, setTargetPlace]);
 
-  // Check for arrival
+  // Check for arrival (ARRIVAL_DISTANCE_THRESHOLD is in feet)
   useEffect(() => {
     if (distanceFeet !== null && distanceFeet < ARRIVAL_DISTANCE_THRESHOLD && !hasArrived) {
       setHasArrived(true);
@@ -134,6 +133,7 @@ export default function CompassScreen() {
 
   // Register dev-only test handlers
   useEffect(() => {
+    if (!__DEV__) return undefined;
     return registerCompassDevHandlers({
       testArrival: () => {
         setHasArrived(true);
@@ -171,21 +171,21 @@ export default function CompassScreen() {
 
   const displayDistance = useMemo(() => {
     if (!distanceFeet) return '--';
+
     if (distanceUnit === 'meters') {
       const distanceMeters = distanceFeet * 0.3048;
       if (distanceMeters < 1000) {
         return `${Math.round(distanceMeters)}m`;
-      } else {
-        const distanceKm = distanceMeters / 1000;
-        return `${distanceKm.toFixed(2)}km`;
       }
-    } else {
-      if (distanceFeet < 5280) {
-        return `${Math.round(distanceFeet)}ft`;
-      } else {
-        return `${distanceMiles?.toFixed(2) || (distanceFeet / 5280).toFixed(2)}mi`;
-      }
+      const distanceKm = distanceMeters / 1000;
+      return `${distanceKm.toFixed(2)}km`;
     }
+
+    if (distanceFeet < 5280) {
+      return `${Math.round(distanceFeet)}ft`;
+    }
+
+    return `${distanceMiles?.toFixed(2) || (distanceFeet / 5280).toFixed(2)}mi`;
   }, [distanceFeet, distanceMiles, distanceUnit]);
 
   const handleToggleUnit = async () => {
@@ -195,8 +195,13 @@ export default function CompassScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  // Hidden reviewer trigger: 5 taps on distance text within 2 seconds
+  const handleToggleLocationName = () => {
+    setShowLocationName(!showLocationName);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   const handleSecretTap = () => {
+    if (!__DEV__) return;
 
     const newCount = tapCount + 1;
     setTapCount(newCount);
@@ -218,9 +223,9 @@ export default function CompassScreen() {
 
   if (loading && !place) {
     return (
-      <View style={[styles.container, { backgroundColor: '#000000' }]}>
+      <View style={[styles.container, { backgroundColor: '#000000' }]}> 
         <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>
+        <Text style={[styles.loadingText, { color: '#FFFFFF' }]}> 
           Finding nearest {CATEGORIES[selectedCategory].label.toLowerCase()}...
         </Text>
       </View>
@@ -230,9 +235,9 @@ export default function CompassScreen() {
   if (error || !place) {
     if (loading) {
       return (
-        <View style={[styles.container, { backgroundColor: '#000000' }]}>
+        <View style={[styles.container, { backgroundColor: '#000000' }]}> 
           <ActivityIndicator size="large" color="#FFFFFF" />
-          <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>
+          <Text style={[styles.loadingText, { color: '#FFFFFF' }]}> 
             Finding nearest {CATEGORIES[selectedCategory].label.toLowerCase()}...
           </Text>
         </View>
@@ -244,16 +249,16 @@ export default function CompassScreen() {
                           !isOnline;
 
     return (
-      <View style={[styles.container, { backgroundColor: '#000000' }]}>
-        <Text style={[styles.errorTitle, { color: '#FFFFFF' }]}>
+      <View style={[styles.container, { backgroundColor: '#000000' }]}> 
+        <Text style={[styles.errorTitle, { color: '#FFFFFF' }]}> 
           {isOfflineError ? 'No Internet Connection' : 'No Places Found'}
         </Text>
-        <Text style={[styles.errorText, { color: '#8E8E93' }]}>
+        <Text style={[styles.errorText, { color: '#8E8E93' }]}> 
           {isOfflineError
             ? 'Please check your internet connection and try again.'
             : error?.message || 'Could not find any nearby places. Try a different category.'}
         </Text>
-        <View style={styles.buttonRow}>
+        <View style={styles.buttonRow}> 
           {isOfflineError && (
             <TouchableOpacity
               style={[styles.button, styles.retryButton, { backgroundColor: '#007AFF' }]}
@@ -266,7 +271,7 @@ export default function CompassScreen() {
             style={[styles.button, { backgroundColor: '#2C2C2E' }]}
             onPress={() => router.back()}
           >
-            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
+            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}> 
               Go Back
             </Text>
           </TouchableOpacity>
@@ -276,11 +281,11 @@ export default function CompassScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: '#000000' }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}> 
       {/* Compass */}
-      <View style={styles.compassContainer}>
-        <CompassNeedle
-          rotation={rotation}
+      <View style={styles.compassContainer}> 
+        <CompassNeedle 
+          rotation={rotation} 
           pulseScale={pulseScale}
           pulseOpacity={pulseOpacity}
           onAligned={!hasArrived ? handleNeedleAligned : undefined}
@@ -288,7 +293,7 @@ export default function CompassScreen() {
       </View>
 
       {/* Info Panel */}
-      <View style={styles.infoContainer}>
+      <View style={styles.infoContainer}> 
         <TouchableOpacity onPress={handleSecretTap} activeOpacity={1}>
           <Text
             style={[styles.distanceText, { color: '#FFFFFF' }]}
@@ -298,26 +303,27 @@ export default function CompassScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Blurred target name until arrival */}
-        <Text
-          style={[
-            styles.targetName,
-            {
-              color: '#8E8E93',
-              opacity: hasArrived ? 1 : 0.3,
-            },
-          ]}
-          numberOfLines={1}
-        >
-          {hasArrived ? place.name : '••••••••'}
-        </Text>
+        {/* Tap to show location name */}
+        <TouchableOpacity onPress={handleToggleLocationName} activeOpacity={0.7}> 
+          <Text
+            style={[
+              styles.targetName,
+              {
+                color: showLocationName ? '#FFFFFF' : '#8E8E93',
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {showLocationName ? place.name : 'Tap to reveal location'}
+          </Text>
+        </TouchableOpacity>
 
         {/* Heading info */}
-        <View style={styles.headingInfo}>
-          <Text style={[styles.headingLabel, { color: '#8E8E93' }]}>
+        <View style={styles.headingInfo}> 
+          <Text style={[styles.headingLabel, { color: '#8E8E93' }]}> 
             Heading: {Math.round(heading)}°
           </Text>
-          <Text style={[styles.headingLabel, { color: '#8E8E93' }]}>
+          <Text style={[styles.headingLabel, { color: '#8E8E93' }]}> 
             Bearing: {Math.round(bearing)}°
           </Text>
         </View>
@@ -328,17 +334,17 @@ export default function CompassScreen() {
         style={[styles.backButton, { backgroundColor: '#2C2C2E' }]}
         onPress={() => router.back()}
       >
-        <Text style={[styles.backButtonText, { color: '#FFFFFF' }]}>
+        <Text style={[styles.backButtonText, { color: '#FFFFFF' }]}> 
           Choose Another
         </Text>
       </TouchableOpacity>
-
+      
       {/* Distance unit toggle button (bottom right) */}
       <TouchableOpacity
         style={[styles.unitToggleButton, { backgroundColor: '#2C2C2E' }]}
         onPress={handleToggleUnit}
       >
-        <Text style={[styles.unitToggleText, { color: '#FFFFFF' }]}>
+        <Text style={[styles.unitToggleText, { color: '#FFFFFF' }]}> 
           ft/m
         </Text>
       </TouchableOpacity>
