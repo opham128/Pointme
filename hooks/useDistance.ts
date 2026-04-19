@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Location } from '../types';
 import { calculateDistance } from '../services/mapboxPlaces';
 
 /**
  * Hook to calculate and track distance between two locations
- * Updates automatically when locations change
+ * Updates automatically when locations change and periodically for smoother updates
  * 
  * @param from Starting location
  * @param to Target location
@@ -19,8 +19,9 @@ export function useDistance(
 } {
   const [distanceFeet, setDistanceFeet] = useState<number | null>(null);
   const [distanceMiles, setDistanceMiles] = useState<number | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
-  useEffect(() => {
+  const calculateAndSetDistance = () => {
     if (!from || !to) {
       setDistanceFeet(null);
       setDistanceMiles(null);
@@ -33,7 +34,24 @@ export function useDistance(
     
     setDistanceFeet(feet);
     setDistanceMiles(miles);
-  }, [from, to]);
+  };
+
+  useEffect(() => {
+    // Calculate immediately when locations change
+    calculateAndSetDistance();
+
+    // Set up periodic updates every 2 seconds for smoother distance display
+    if (from && to) {
+      intervalRef.current = setInterval(calculateAndSetDistance, 2000);
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [from?.latitude, from?.longitude, to?.latitude, to?.longitude]);
 
   return {
     distanceFeet,
