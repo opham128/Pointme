@@ -516,7 +516,7 @@ export default function HomeScreen() {
       </View>
 
       <Text style={[styles.subtitle, { color: '#8E8E93' }]}>
-        Choose a destination type
+        To the nearest...
       </Text>
 
       <ScrollView
