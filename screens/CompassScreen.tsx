@@ -15,6 +15,7 @@ import Animated, {
   withTiming,
   withSequence,
   Easing,
+  useDerivedValue,
 } from 'react-native-reanimated';
 import { useAppContext } from '../context/AppContext';
 import { useHeading } from '../hooks/useHeading';
@@ -178,24 +179,49 @@ export default function CompassScreen() {
     if (Math.abs(rotation) > 2) hasAlignedRef.current = false;
   }, [rotation, place, hasArrived]);
 
-  const displayDistance = useMemo(() => {
-    if (!distanceFeet) return '--';
+  const displayData = useMemo(() => {
+    if (!distanceFeet) return { rawNumber: 0, unit: '--' };
+
     if (distanceUnit === 'meters') {
       const distanceMeters = distanceFeet * 0.3048;
       if (distanceMeters < 1000) {
-        return `${Math.round(distanceMeters)}m`;
+        return { rawNumber: distanceMeters, unit: 'm' };
       } else {
         const distanceKm = distanceMeters / 1000;
-        return `${distanceKm.toFixed(2)}km`;
+        return { rawNumber: distanceKm, unit: 'km' };
       }
     } else {
       if (distanceFeet < 5280) {
-        return `${Math.round(distanceFeet)}ft`;
+        return { rawNumber: distanceFeet, unit: 'ft' };
       } else {
-        return `${distanceMiles?.toFixed(2) || (distanceFeet / 5280).toFixed(2)}mi`;
+        return { rawNumber: distanceMiles || (distanceFeet / 5280), unit: 'mi' };
       }
     }
   }, [distanceFeet, distanceMiles, distanceUnit]);
+
+  // Animated number for countdown effect
+  const animatedRawNumber = useSharedValue(displayData.rawNumber);
+
+  useEffect(() => {
+    animatedRawNumber.value = withTiming(displayData.rawNumber, { duration: 300 });
+  }, [displayData.rawNumber]);
+
+  const animatedText = useDerivedValue<React.ReactNode>(() => {
+    const num = animatedRawNumber.value;
+    let text;
+    if (displayData.unit === 'm') {
+      text = `${Math.round(num)}m`;
+    } else if (displayData.unit === 'km') {
+      text = `${num.toFixed(2)}km`;
+    } else if (displayData.unit === 'ft') {
+      text = `${Math.round(num)}ft`;
+    } else if (displayData.unit === 'mi') {
+      text = `${num.toFixed(2)}mi`;
+    } else {
+      text = '--';
+    }
+    return text;
+  });
 
   const handleToggleUnit = async () => {
     const newUnit: DistanceUnit = distanceUnit === 'feet' ? 'meters' : 'feet';
@@ -295,9 +321,9 @@ export default function CompassScreen() {
       {/* ── Info panel ───────────────────────────────────────────────────── */}
       <View style={styles.infoPanel}>
         {/* Distance */}
-        <Text style={styles.distanceValue}>
-          {displayDistance}
-        </Text>
+        <Animated.Text style={styles.distanceValue}>
+          {animatedText}
+        </Animated.Text>
 
         {/* Tap to reveal location name */}
         <TouchableOpacity onPress={handleToggleLocationName} activeOpacity={0.7} style={styles.revealRow}>
