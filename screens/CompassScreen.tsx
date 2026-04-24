@@ -15,7 +15,6 @@ import Animated, {
   withTiming,
   withSequence,
   Easing,
-  useDerivedValue,
 } from 'react-native-reanimated';
 import { useAppContext } from '../context/AppContext';
 import { useHeading } from '../hooks/useHeading';
@@ -180,7 +179,7 @@ export default function CompassScreen() {
   }, [rotation, place, hasArrived]);
 
   const displayData = useMemo(() => {
-    if (!distanceFeet) return { rawNumber: 0, unit: '--' };
+    if (distanceFeet === null || distanceFeet === undefined) return { rawNumber: 0, unit: '--' };
 
     if (distanceUnit === 'meters') {
       const distanceMeters = distanceFeet * 0.3048;
@@ -190,38 +189,71 @@ export default function CompassScreen() {
         const distanceKm = distanceMeters / 1000;
         return { rawNumber: distanceKm, unit: 'km' };
       }
-    } else {
-      if (distanceFeet < 5280) {
-        return { rawNumber: distanceFeet, unit: 'ft' };
-      } else {
-        return { rawNumber: distanceMiles || (distanceFeet / 5280), unit: 'mi' };
-      }
     }
+
+    if (distanceFeet < 5280) {
+      return { rawNumber: distanceFeet, unit: 'ft' };
+    }
+
+    return { rawNumber: distanceMiles || (distanceFeet / 5280), unit: 'mi' };
   }, [distanceFeet, distanceMiles, distanceUnit]);
 
-  // Animated number for countdown effect
-  const animatedRawNumber = useSharedValue(displayData.rawNumber);
+  const formatDistance = (value: number, unit: string) => {
+    if (unit === 'm') return `${Math.round(value)}m`;
+    if (unit === 'km') return `${value.toFixed(2)}km`;
+    if (unit === 'ft') return `${Math.round(value)}ft`;
+    if (unit === 'mi') return `${value.toFixed(2)}mi`;
+    return '--';
+  };
+
+  const [animatedDistance, setAnimatedDistance] = useState<string>(() => {
+    return displayData.unit === '--' ? '--' : formatDistance(displayData.rawNumber, displayData.unit);
+  });
+  const animationFrameRef = useRef<number | null>(null);
+  const previousRawValueRef = useRef<number>(displayData.rawNumber);
+  const previousUnitRef = useRef<string>(displayData.unit);
 
   useEffect(() => {
-    animatedRawNumber.value = withTiming(displayData.rawNumber, { duration: 300 });
-  }, [displayData.rawNumber]);
-
-  const animatedText = useDerivedValue<React.ReactNode>(() => {
-    const num = animatedRawNumber.value;
-    let text;
-    if (displayData.unit === 'm') {
-      text = `${Math.round(num)}m`;
-    } else if (displayData.unit === 'km') {
-      text = `${num.toFixed(2)}km`;
-    } else if (displayData.unit === 'ft') {
-      text = `${Math.round(num)}ft`;
-    } else if (displayData.unit === 'mi') {
-      text = `${num.toFixed(2)}mi`;
-    } else {
-      text = '--';
+    if (displayData.unit === '--') {
+      setAnimatedDistance('--');
+      previousRawValueRef.current = 0;
+      previousUnitRef.current = '--';
+      return;
     }
-    return text;
-  });
+
+    const startValue = previousUnitRef.current === displayData.unit
+      ? previousRawValueRef.current
+      : displayData.rawNumber;
+    const endValue = displayData.rawNumber;
+    const duration = 300;
+    const startTime = Date.now();
+
+    const step = () => {
+      const now = Date.now();
+      const elapsed = Math.min(duration, now - startTime);
+      const progress = elapsed / duration;
+      const currentValue = startValue + (endValue - startValue) * progress;
+      setAnimatedDistance(formatDistance(currentValue, displayData.unit));
+
+      if (elapsed < duration) {
+        animationFrameRef.current = requestAnimationFrame(step);
+      } else {
+        previousRawValueRef.current = endValue;
+        previousUnitRef.current = displayData.unit;
+      }
+    };
+
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    animationFrameRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [displayData.rawNumber, displayData.unit]);
 
   const handleToggleUnit = async () => {
     const newUnit: DistanceUnit = distanceUnit === 'feet' ? 'meters' : 'feet';
@@ -321,9 +353,9 @@ export default function CompassScreen() {
       {/* ── Info panel ───────────────────────────────────────────────────── */}
       <View style={styles.infoPanel}>
         {/* Distance */}
-        <Animated.Text style={styles.distanceValue}>
-          {animatedText}
-        </Animated.Text>
+        <Text style={styles.distanceValue}>
+          {animatedDistance}
+        </Text>
 
         {/* Tap to reveal location name */}
         <TouchableOpacity onPress={handleToggleLocationName} activeOpacity={0.7} style={styles.revealRow}>
