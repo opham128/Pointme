@@ -1,8 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Place, Location, Category } from '../types';
+import {
+  clearSecureArrivalCount,
+  getSecureArrivalCount,
+  setSecureArrivalCount,
+} from './secureStorage';
 
 const ARRIVAL_HISTORY_KEY = '@pointme:arrival_history';
-const ARRIVAL_COUNT_KEY = '@pointme:arrival_count';
 const DISTANCE_PREFERENCES_KEY = '@pointme:distance_preferences';
 const PLACE_CACHE_KEY = '@pointme:place_cache';
 const DISTANCE_UNIT_KEY = '@pointme:distance_unit';
@@ -58,9 +62,9 @@ export async function addArrival(place: Place): Promise<void> {
     
     await AsyncStorage.setItem(ARRIVAL_HISTORY_KEY, JSON.stringify(newHistory));
     
-    // Update arrival count
+    // Update arrival count (Keychain / secure storage — survives reinstall on iOS)
     const count = await getArrivalCount();
-    await AsyncStorage.setItem(ARRIVAL_COUNT_KEY, String(count + 1));
+    await setSecureArrivalCount(count + 1);
   } catch (error) {
     console.error('Error adding arrival:', error);
   }
@@ -70,13 +74,7 @@ export async function addArrival(place: Place): Promise<void> {
  * Get the total arrival count
  */
 export async function getArrivalCount(): Promise<number> {
-  try {
-    const count = await AsyncStorage.getItem(ARRIVAL_COUNT_KEY);
-    return count ? parseInt(count, 10) : 0;
-  } catch (error) {
-    console.error('Error getting arrival count:', error);
-    return 0;
-  }
+  return getSecureArrivalCount();
 }
 
 /**
@@ -100,7 +98,7 @@ export async function getRecentPlaceIds(): Promise<string[]> {
 export async function clearArrivalHistory(): Promise<void> {
   try {
     await AsyncStorage.removeItem(ARRIVAL_HISTORY_KEY);
-    // Note: We keep ARRIVAL_COUNT_KEY so the total count is preserved
+    // Note: arrival count is kept in Keychain / secure storage
   } catch (error) {
     console.error('Error clearing arrival history:', error);
   }
@@ -113,7 +111,7 @@ export async function clearArrivalHistory(): Promise<void> {
 export async function clearAllStorage(): Promise<void> {
   try {
     await AsyncStorage.removeItem(ARRIVAL_HISTORY_KEY);
-    await AsyncStorage.removeItem(ARRIVAL_COUNT_KEY);
+    await clearSecureArrivalCount();
     const { clearReviewPromptState } = await import('./reviewPrompt');
     await clearReviewPromptState();
     console.log('All storage cleared');

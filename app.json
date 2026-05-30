@@ -44,6 +44,7 @@
         "backgroundColor": "#000000"
       },
       "package": "com.pointme.app",
+      "allowBackup": true,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -67,7 +68,8 @@
       ],
       "expo-font",
       "expo-asset",
-      "expo-iap"
+      "expo-iap",
+      "expo-secure-store"
     ],
     "scheme": "pointme",
     "extra": {
