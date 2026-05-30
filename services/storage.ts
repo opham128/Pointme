@@ -114,6 +114,8 @@ export async function clearAllStorage(): Promise<void> {
   try {
     await AsyncStorage.removeItem(ARRIVAL_HISTORY_KEY);
     await AsyncStorage.removeItem(ARRIVAL_COUNT_KEY);
+    const { clearReviewPromptState } = await import('./reviewPrompt');
+    await clearReviewPromptState();
     console.log('All storage cleared');
   } catch (error) {
     console.error('Error clearing all storage:', error);

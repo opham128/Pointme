@@ -57,5 +57,8 @@ export const GOOGLE_PLACES_API_BASE_URL = 'https://maps.googleapis.com/maps/api/
 export const FREE_LOCATIONS_LIMIT = 5; // Number of free locations before paywall
 export const PURCHASE_PRICE = 1.99; // Price in USD
 
+// Ask for a review after the user has arrived a few times (positive moment, not on first use)
+export const REVIEW_PROMPT_MIN_ARRIVALS = 2;
+
 
 export { Category };

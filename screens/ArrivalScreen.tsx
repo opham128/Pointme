@@ -13,7 +13,9 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../context/AppContext';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
-import { addArrival, clearCacheEntry } from '../services/storage';
+import { ReviewPromptBanner } from '../components/ReviewPromptBanner';
+import { addArrival, clearCacheEntry, getArrivalCount } from '../services/storage';
+import { dismissReviewPrompt, requestAppReview, shouldShowReviewPrompt } from '../services/reviewPrompt';
 import { FREE_LOCATIONS_LIMIT } from '../constants';
 import { SORA } from '../constants/fonts';
 import { EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN as ENV_TOKEN } from '@env';
@@ -30,11 +32,13 @@ import Animated, {
 export default function ArrivalScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
-  const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory, arrivalCount, hasPurchased, setCategoryPreferences, selectedCategory, userLocation, categoryPreferences } = useAppContext();
+  const { targetPlace, setSelectedCategory, setTargetPlace, refreshHistory, hasPurchased, setCategoryPreferences, selectedCategory, userLocation, categoryPreferences } = useAppContext();
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [hasSavedArrival, setHasSavedArrival] = useState(false);
   const [mapImageReady, setMapImageReady] = useState(false);
+  const [showReviewPrompt, setShowReviewPrompt] = useState(false);
   const hasAnimatedRef = React.useRef(false);
+  const reviewPromptCheckedRef = React.useRef(false);
   
   // Generate Mapbox static map URL with pin marker overlay
   // Format: /styles/v1/{style_id}/static/pin-s-{size}+{color}({lon},{lat})/{lon},{lat},{zoom}/{width}x{height}?access_token={token}
@@ -71,6 +75,14 @@ export default function ArrivalScreen() {
       addArrival(targetPlace).then(async () => {
         refreshHistory();
         setHasSavedArrival(true);
+
+        if (!reviewPromptCheckedRef.current) {
+          reviewPromptCheckedRef.current = true;
+          const count = await getArrivalCount();
+          if (await shouldShowReviewPrompt(count)) {
+            setTimeout(() => setShowReviewPrompt(true), 2500);
+          }
+        }
         
         // Clear cache for this category/location since arrival happened
         // This ensures next query is fresh (location may have changed)
@@ -214,10 +226,21 @@ export default function ArrivalScreen() {
   };
 
   const handleChooseAnother = () => {
+    setShowReviewPrompt(false);
     setSelectedCategory(null);
     setTargetPlace(null);
     setCategoryPreferences(null);
     router.replace('/');
+  };
+
+  const handleDismissReview = () => {
+    setShowReviewPrompt(false);
+    dismissReviewPrompt();
+  };
+
+  const handleRequestReview = () => {
+    setShowReviewPrompt(false);
+    requestAppReview();
   };
 
   if (!targetPlace) {
@@ -301,27 +324,35 @@ export default function ArrivalScreen() {
         </View>
       </View>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.button, styles.primaryButton, { backgroundColor: '#007AFF' }]}
-          onPress={handleOpenInMaps}
-        >
-          <Text style={styles.primaryButtonText}>Open in Maps</Text>
-        </TouchableOpacity>
+      <View style={styles.footer}>
+        <ReviewPromptBanner
+          visible={showReviewPrompt}
+          onDismiss={handleDismissReview}
+          onReview={handleRequestReview}
+        />
 
-        <TouchableOpacity
-          style={[
-            styles.button,
-            {
-              backgroundColor: '#2C2C2E',
-            },
-          ]}
-          onPress={handleChooseAnother}
-        >
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
-            Try Another Place
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[styles.button, styles.primaryButton, { backgroundColor: '#007AFF' }]}
+            onPress={handleOpenInMaps}
+          >
+            <Text style={styles.primaryButtonText}>Open in Maps</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.button,
+              {
+                backgroundColor: '#2C2C2E',
+              },
+            ]}
+            onPress={handleChooseAnother}
+          >
+            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
+              Try Another Place
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -495,6 +526,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: SORA.Regular,
     textAlign: 'center',
+  },
+  footer: {
+    width: '100%',
+    gap: 12,
   },
   buttonContainer: {
     width: '100%',
