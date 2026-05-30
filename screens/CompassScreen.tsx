@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -56,6 +57,10 @@ export default function CompassScreen() {
   const hasAlignedRef = useRef(false);
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('feet');
   const lastHapticTimeRef = useRef<number>(0);
+
+  // Testing feature refs
+  const tapCountRef = useRef(0);
+  const lastDistanceTapRef = useRef(0);
 
   // Pulsing glow animation for when close
   const pulseScale   = useSharedValue(1);
@@ -267,6 +272,25 @@ export default function CompassScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  // ── Testing Secret Handler ──────────────────────────────────────────────────
+  const handleDistanceTap = () => {
+    const now = Date.now();
+    // 500ms threshold between taps to count as a sequence
+    if (now - lastDistanceTapRef.current < 500) {
+      tapCountRef.current += 1;
+    } else {
+      tapCountRef.current = 1;
+    }
+    lastDistanceTapRef.current = now;
+
+    if (tapCountRef.current >= 5 && !hasArrived) {
+      tapCountRef.current = 0; // reset
+      setHasArrived(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => router.push('/arrival'), 500);
+    }
+  };
+
   // Animated styles
   const ringAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: ringScale.value }],
@@ -352,10 +376,14 @@ export default function CompassScreen() {
 
       {/* ── Info panel ───────────────────────────────────────────────────── */}
       <View style={styles.infoPanel}>
-        {/* Distance */}
-        <Text style={styles.distanceValue}>
-          {animatedDistance}
-        </Text>
+        {/* Distance - Wrapped for multi-tap */}
+        <TouchableWithoutFeedback onPress={handleDistanceTap}>
+          <View>
+            <Text style={styles.distanceValue}>
+              {animatedDistance}
+            </Text>
+          </View>
+        </TouchableWithoutFeedback>
 
         {/* Tap to reveal location name */}
         <TouchableOpacity onPress={handleToggleLocationName} activeOpacity={0.7} style={styles.revealRow}>
