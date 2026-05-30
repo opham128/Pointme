@@ -12,3 +12,6 @@ web-build/
 .env
 .DS_Store
 
+# Generated native projects (Continuous Native Generation / EAS Prebuild)
+/ios
+/android

@@ -69,7 +69,8 @@
       "expo-font",
       "expo-asset",
       "expo-iap",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-router"
     ],
     "scheme": "pointme",
     "extra": {
