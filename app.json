@@ -2,7 +2,7 @@
   "expo": {
     "name": "Pointme",
     "slug": "pointme",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/appstore.png",
     "userInterfaceStyle": "automatic",
@@ -17,20 +17,12 @@
     "ios": {
       "supportsTablet": true,
       "runtimeVersion": "1.0.0",
+      "buildNumber": "2",
       "bundleIdentifier": "com.pointme.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs your location to find nearby places and show you the direction.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs your location to find nearby places and show you the direction.",
         "LSApplicationQueriesSchemes": [
-          "comgooglemaps",
-          "googlechromes",
-          "maps",
-          "comgooglemaps",
-          "googlechromes",
-          "maps",
-          "comgooglemaps",
-          "googlechromes",
-          "maps",
           "comgooglemaps",
           "googlechromes",
           "maps"
@@ -47,13 +39,7 @@
       "allowBackup": true,
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
