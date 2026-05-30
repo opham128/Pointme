@@ -13,6 +13,9 @@ interface AppContextType {
   setTargetPlace: (place: Place | null) => void;
   userLocation: Location | null;
   setUserLocation: (location: Location | null) => void;
+  /** Manual location set by user via search bar (when GPS is denied) */
+  manualLocation: Location | null;
+  setManualLocation: (location: Location | null) => void;
   arrivalHistory: ArrivalHistoryItem[];
   arrivalCount: number;
   refreshHistory: () => Promise<void>;
@@ -28,6 +31,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [targetPlace, setTargetPlace] = useState<Place | null>(null);
   const [userLocation, setUserLocation] = useState<Location | null>(null);
+  const [manualLocation, setManualLocation] = useState<Location | null>(null);
   const [arrivalHistory, setArrivalHistory] = useState<ArrivalHistoryItem[]>([]);
   const [arrivalCount, setArrivalCount] = useState<number>(0);
   const [hasPurchased, setHasPurchased] = useState<boolean>(false);
@@ -66,6 +70,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setTargetPlace,
         userLocation,
         setUserLocation,
+        manualLocation,
+        setManualLocation,
         arrivalHistory,
         arrivalCount,
         refreshHistory,

@@ -8,6 +8,11 @@ import {
   TouchableOpacity,
   Share,
   Linking,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  FlatList,
+  Alert,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -19,8 +24,9 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import * as ExpoLocation from 'expo-location';
 import { useRouter } from 'expo-router';
-import { Category } from '../types';
+import { Category, Location } from '../types';
 import { CATEGORIES, FREE_LOCATIONS_LIMIT } from '../constants';
 import { CategoryButton } from '../components/CategoryButton';
 import { useAppContext } from '../context/AppContext';
@@ -29,6 +35,8 @@ import { clearAllStorage } from '../services/storage';
 import { togglePurchaseStatusDebug } from '../services/purchases';
 import { RESTAURANT_CUISINES } from '../constants';
 import { SORA } from '../constants/fonts';
+import { geocodeLocation } from '../services/geocoding';
+import { EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN } from '@env';
 
 const ACCENT_COLOR = '#007AFF';
 const BORDER = '#242424';
@@ -37,16 +45,24 @@ const WHITE  = '#F0EDE6';
 export default function HomeScreen() {
   const isDark = true; // Always dark mode
   const router = useRouter();
-  const { setSelectedCategory, requestSearch, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences, userLocation: contextLocation } = useAppContext();
+  const { setSelectedCategory, requestSearch, setUserLocation, arrivalCount, hasPurchased, refreshHistory, refreshPurchaseStatus, setCategoryPreferences, userLocation: contextLocation, manualLocation, setManualLocation } = useAppContext();
   const { location, loading, error, permissionGranted, requestPermission } = useLocation();
   
   // Use location from context immediately if available (prevents long loading when navigating back)
-  const effectiveLocation = location || contextLocation;
+  // Fall back to manual location if GPS is not available
+  const effectiveLocation = location || contextLocation || manualLocation;
   
   // Category filtering state (for paid users) - reset each time, not saved
   const [restaurantCuisine, setRestaurantCuisine] = useState<string | null>(null);
   const [expandedCategory, setExpandedCategory] = useState<Category | null>(null);
 
+  // Manual location search state (when GPS permission denied)
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchLoading, setSearchLoading] = useState<boolean>(false);
+  const [searchError, setSearchError] = useState<string>('');
+  const [showLocationSearch, setShowLocationSearch] = useState<boolean>(false);
+  const [autocompleteResults, setAutocompleteResults] = useState<any[]>([]);
+  const [showAutocomplete, setShowAutocomplete] = useState<boolean>(false);
   
   // Animation values
   const titleOpacity = useSharedValue(0);
@@ -80,7 +96,9 @@ export default function HomeScreen() {
   }, [location, setUserLocation]);
 
   const handleCategorySelect = (category: Category) => {
-    if (!permissionGranted || !effectiveLocation) {
+    // Only require permission if there's NO location source at all
+    // If user has manual location set, they don't need GPS permission
+    if (!effectiveLocation) {
       requestPermission();
       return;
     }
@@ -132,6 +150,114 @@ export default function HomeScreen() {
     }
   };
 
+  // Handle "Locate Me" button press - only request permission when user explicitly presses button
+  const handleLocateMe = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Check current permission status first
+    const { status } = await ExpoLocation.getForegroundPermissionsAsync();
+    
+    if (status === 'denied') {
+      // Permission was already denied (possibly with "Never Allow")
+      // Try requesting again - if it's "Never Allow", dialog won't show
+      const result = await ExpoLocation.requestForegroundPermissionsAsync();
+      if (result.status !== 'granted') {
+        // Still denied - show alert to open Settings
+        Alert.alert(
+          'Location Permission Required',
+          'To use GPS, please enable location access in Settings. Tap "Open Settings" below.',
+          [
+            { text: 'Cancel', onPress: () => {}, style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings(), style: 'default' }
+          ]
+        );
+        return;
+      }
+    } else {
+      // First time or not yet decided - request normally
+      await requestPermission();
+    }
+  };
+
+  // Handle autocomplete search
+  const handleLocationAutocomplete = async (text: string) => {
+    setSearchQuery(text);
+    setSearchError('');
+
+    if (!text.trim() || text.length < 2) {
+      setAutocompleteResults([]);
+      setShowAutocomplete(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?limit=5&access_token=${EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN}`
+      );
+      const data = await response.json();
+
+      if (data.features) {
+        setAutocompleteResults(
+          data.features.map((feature: any) => ({
+            id: feature.id,
+            placeName: feature.place_name,
+            coordinates: feature.geometry.coordinates,
+          }))
+        );
+        setShowAutocomplete(true);
+      }
+    } catch (err) {
+      console.log('Autocomplete error:', err);
+      setAutocompleteResults([]);
+    }
+  };
+
+  // Handle selecting an autocomplete result
+  const handleSelectResult = async (result: any) => {
+    const [lng, lat] = result.coordinates;
+    const location: Location = {
+      latitude: lat,
+      longitude: lng,
+    };
+    
+    setManualLocation(location);
+    setShowLocationSearch(false);
+    setSearchQuery('');
+    setAutocompleteResults([]);
+    setShowAutocomplete(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Show success feedback
+    Alert.alert('Location Set', `${result.placeName}\nYou can now search for places!`);
+  };
+
+  // Handle manual location search (fallback if user doesn't select autocomplete)
+  const handleLocationSearch = async () => {
+    if (!searchQuery.trim()) {
+      setSearchError('Please enter a city, zip code, or address');
+      return;
+    }
+
+    setSearchLoading(true);
+    setSearchError('');
+
+    try {
+      const result = await geocodeLocation(searchQuery);
+      setManualLocation(result);
+      setShowLocationSearch(false);
+      setSearchQuery('');
+      setAutocompleteResults([]);
+      setShowAutocomplete(false);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Show success feedback
+      Alert.alert('Location Set', `${searchQuery}\nYou can now search for places!`);
+    } catch (err: any) {
+      setSearchError(err.message || 'Failed to find location');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
   const handleInviteFriend = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
@@ -149,6 +275,7 @@ export default function HomeScreen() {
       const result = await Share.share({
         message: 'Point yourself towards the nearest bar 🍺',
         title: 'Point Me: Random Bar Compass',
+        url: 'https://apps.apple.com/us/app/pointme-random-bar-compass/id6761635879',
       });
     } catch (error) {
       console.error('Error sharing:', error);
@@ -160,7 +287,7 @@ export default function HomeScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       await clearAllStorage();
       await refreshHistory();
-      alert('Storage cleared! Arrival count reset.');
+      Alert.alert('Storage Cleared', 'Arrival count reset.');
     }
   };
 
@@ -170,9 +297,9 @@ export default function HomeScreen() {
       try {
         const newStatus = await togglePurchaseStatusDebug();
         await refreshPurchaseStatus();
-        alert(`Purchase status: ${newStatus ? 'PAID USER' : 'FREE USER'}`);
+        Alert.alert('Purchase Status', newStatus ? 'PAID USER' : 'FREE USER');
       } catch (error) {
-        alert('Error toggling purchase status');
+        Alert.alert('Error', 'Error toggling purchase status');
       }
     }
   };
@@ -194,7 +321,7 @@ export default function HomeScreen() {
   }));
 
   // Only show loading if we don't have location from context either
-  if (loading && !contextLocation) {
+  if (loading && !contextLocation && !manualLocation) {
     return (
       <View style={[styles.container, { backgroundColor: '#000000' }]}>
         <ActivityIndicator size="large" color="#FFFFFF" />
@@ -205,23 +332,138 @@ export default function HomeScreen() {
     );
   }
 
-  if (error || !permissionGranted) {
+  // Show location setup page ONLY if:
+  // 1. Permission is NOT granted
+  // 2. AND location is not available from other sources
+  if (!permissionGranted && !location && !manualLocation) {
+    return (
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, backgroundColor: '#000000' }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+      >
+        <ScrollView
+          style={{ flex: 1, backgroundColor: '#000000' }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={{ paddingTop: 60, marginBottom: 30 }}>
+            <Text style={[styles.errorTitle, { color: '#FFFFFF' }]}>
+              📍 Set Your Location
+            </Text>
+            <Text style={[styles.errorText, { color: '#8E8E93', marginTop: 12 }]}>
+              Choose how to search for places
+            </Text>
+          </View>
+
+          {/* GPS Location (Top/Preferred) */}
+          <View style={[styles.locationOptionContainer, { marginBottom: 30 }]}>
+            <Text style={[styles.locationSearchLabel, { color: '#FFFFFF', marginBottom: 12 }]}>
+              📡 Use GPS (Recommended)
+            </Text>
+            <Text style={[styles.locationSearchDescription, { color: '#8E8E93' }]}>
+              Enable real-time location for precise navigation to nearby places
+            </Text>
+            <TouchableOpacity
+              style={[styles.permissionButton, { backgroundColor: '#30B0C0', marginTop: 12 }]}
+              onPress={handleLocateMe}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.permissionButtonText}>Locate Me</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Divider */}
+          <View style={[styles.divider, { backgroundColor: '#3A3A3C' }]} />
+
+          {/* Manual Location Search */}
+          <View style={[styles.locationSearchContainer, { backgroundColor: '#1C1C1E', marginTop: 30, marginBottom: 300 }]}>
+            <Text style={[styles.locationSearchLabel, { color: '#FFFFFF' }]}>
+              🔍 Search by City or Zip Code
+            </Text>
+            <Text style={[styles.locationSearchDescription, { color: '#8E8E93', marginBottom: 12 }]}>
+              Search for places without GPS
+            </Text>
+            <View style={{ position: 'relative', zIndex: 1000 }}>
+              <TextInput
+                style={[styles.locationSearchInput, { color: '#FFFFFF', borderColor: searchError ? '#FF3B30' : '#3A3A3C' }]}
+                placeholder="e.g., San Francisco, 90210"
+                placeholderTextColor="#8E8E93"
+                value={searchQuery}
+                onChangeText={handleLocationAutocomplete}
+                editable={!searchLoading}
+              />
+              
+              {/* Autocomplete Dropdown */}
+              {showAutocomplete && autocompleteResults.length > 0 && (
+                <View style={[styles.autocompleteDropdown, { backgroundColor: '#2C2C2E' }]}>
+                  <FlatList
+                    data={autocompleteResults}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.autocompleteItem}
+                        onPress={() => handleSelectResult(item)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.autocompleteItemText, { color: '#FFFFFF' }]}>
+                          {item.placeName}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+              )}
+            </View>
+
+            {searchError ? (
+              <Text style={[styles.errorMessage, { color: '#FF3B30' }]}>{searchError}</Text>
+            ) : null}
+            {!showAutocomplete && searchQuery.trim() && (
+              <TouchableOpacity
+                style={[styles.permissionButton, { backgroundColor: '#007AFF', marginTop: 12 }]}
+                onPress={handleLocationSearch}
+                disabled={searchLoading}
+                activeOpacity={0.8}
+              >
+                {searchLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.permissionButtonText}>Find Location</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Info Text */}
+          <Text style={[styles.infoText, { color: '#8E8E93', marginTop: 40 }]}>
+            GPS is recommended for the best compass navigation experience. Manual location search works for initial searches.
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // Show error if there's a location error (for actual technical issues)
+  if (error && !manualLocation) {
     const openAppSettings = () => Linking.openSettings();
 
     return (
       <View style={[styles.container, { backgroundColor: '#000000' }]}>
         <Text style={[styles.errorTitle, { color: '#FFFFFF' }]}>
-          Location Permission Required
+          Location Error
         </Text>
         <Text style={[styles.errorText, { color: '#8E8E93' }]}>
-          {error?.message || 'We need your location to find nearby places.'}
+          {error?.message || 'Failed to access location.'}
         </Text>
         <TouchableOpacity
           style={[styles.permissionButton, { backgroundColor: '#007AFF' }]}
-          onPress={() => requestPermission()}
+          onPress={handleLocateMe}
           activeOpacity={0.8}
         >
-          <Text style={styles.permissionButtonText}>Grant permission</Text>
+          <Text style={styles.permissionButtonText}>Try Again</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.permissionButton, styles.permissionButtonSecondary]}
@@ -232,9 +474,6 @@ export default function HomeScreen() {
             Open Settings
           </Text>
         </TouchableOpacity>
-        <Text style={[styles.retryText, { color: '#8E8E93' }]}>
-          If you denied access, open Settings and enable Location for Point Me.
-        </Text>
       </View>
     );
   }
@@ -277,7 +516,7 @@ export default function HomeScreen() {
       </View>
 
       <Text style={[styles.subtitle, { color: '#8E8E93' }]}>
-        Choose a destination type
+        To the nearest...
       </Text>
 
       <ScrollView
@@ -569,5 +808,73 @@ const styles = StyleSheet.create({
   debugButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  
+  // Location search styles
+  locationSearchContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#3A3A3C',
+  },
+  locationSearchLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: SORA.SemiBold,
+    marginBottom: 12,
+  },
+  locationSearchDescription: {
+    fontSize: 14,
+    fontFamily: SORA.Regular,
+    lineHeight: 21,
+  },
+  locationSearchInput: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    fontSize: 16,
+    fontFamily: SORA.Regular,
+  },
+  errorMessage: {
+    fontSize: 13,
+    fontFamily: SORA.Regular,
+    marginTop: 8,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 24,
+  },
+  locationOptionContainer: {
+    marginBottom: 20,
+  },
+  infoText: {
+    fontSize: 13,
+    fontFamily: SORA.Regular,
+    textAlign: 'center',
+    lineHeight: 19,
+    paddingHorizontal: 10,
+  },
+  
+  // Autocomplete styles
+  autocompleteDropdown: {
+    borderRadius: 12,
+    marginTop: 8,
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: '#3A3A3C',
+    overflow: 'hidden',
+  },
+  autocompleteItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#3A3A3C',
+  },
+  autocompleteItemText: {
+    fontSize: 14,
+    fontFamily: SORA.Regular,
   },
 });
