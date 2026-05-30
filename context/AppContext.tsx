@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Category, Place, Location } from '../types';
 import { getArrivalHistory, getArrivalCount, ArrivalHistoryItem } from '../services/storage';
-import { hasPurchasedFullApp, initializePurchases } from '../services/purchases';
+import { hasPurchasedFullApp, initializePurchases, restorePurchases } from '../services/purchases';
 
 interface AppContextType {
   selectedCategory: Category | null;
@@ -53,10 +53,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    refreshHistory();
-    refreshPurchaseStatus();
-    // Initialize purchases on app startup
-    initializePurchases();
+    const bootstrap = async () => {
+      await refreshHistory();
+      await initializePurchases();
+      // Re-link paid unlock after reinstall (local AsyncStorage is wiped on delete)
+      await restorePurchases();
+      await refreshPurchaseStatus();
+    };
+
+    bootstrap();
   }, []);
 
   return (
